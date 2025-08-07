@@ -1,6 +1,9 @@
 # CK PyBIS Toolkit
 
-A command-line interface for OpenBIS operations with enhanced upload functionality, metadata extraction, and automatic file type detection. This toolkit provides comprehensive dataset management capabilities for OpenBIS servers.
+[![Docker](https://github.com/yourusername/ck-pybis-toolkit/actions/workflows/docker.yml/badge.svg)](https://github.com/yourusername/ck-pybis-toolkit/actions/workflows/docker.yml)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/yourusername/ck-pybis-toolkit/releases)
+
+A command-line interface for OpenBIS operations with enhanced upload functionality, metadata extraction, and automatic file type detection. This toolkit provides comprehensive dataset management capabilities for OpenBIS servers. Built on PyBIS 1.37.3.
 
 ## 🚀 Quick Start
 
@@ -410,6 +413,54 @@ pybis upload database.fasta --version "1.0"
 - **Secure credential management** - Encrypted storage with proper file permissions
 - **Collection management** - Batch download and upload operations
 - **Dry-run support** - Preview operations before execution
+
+## 🐳 Docker Usage
+
+### Pull from GitHub Container Registry
+```bash
+# Latest version
+docker pull ghcr.io/yourusername/ck-pybis-toolkit:latest
+
+# Specific version
+docker pull ghcr.io/yourusername/ck-pybis-toolkit:1.0.0
+```
+
+### Run with credentials
+```bash
+# Mount credentials file
+docker run --rm -v ~/.openbis/credentials:/root/.openbis/credentials:ro \
+    ghcr.io/yourusername/ck-pybis-toolkit:latest connect --verbose
+
+# Mount data directory for downloads
+docker run --rm -v ~/.openbis/credentials:/root/.openbis/credentials:ro \
+    -v ~/data:/data \
+    ghcr.io/yourusername/ck-pybis-toolkit:latest \
+    download 20250807085639331-1331542 --output /data
+```
+
+## 📋 Versioning
+
+- **Project Version**: Independent semantic versioning (v1.0.0, v1.1.0, etc.)
+- **PyBIS Dependency**: Uses PyBIS 1.37.3 (pinned for stability)
+- **Container Tags**: Automatic GitHub Actions deployment
+  - `latest` - Main branch builds
+  - `v1.0.0` - Tagged releases
+  - `1.0.0` - Semantic version
+  - `1.0` - Major.minor version
+
+### Release Process
+```bash
+# Update version in setup.py
+vim setup.py  # Change version="1.0.1"
+
+# Commit and tag
+git add setup.py CLAUDE.md README.md
+git commit -m "Release v1.0.1"
+git tag -a v1.0.1 -m "Release v1.0.1"
+git push origin main v1.0.1
+
+# GitHub Actions automatically builds and pushes container
+```
 
 ## 🤝 Contributing
 
