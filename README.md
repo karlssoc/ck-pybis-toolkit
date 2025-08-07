@@ -1,7 +1,7 @@
 # CK PyBIS Toolkit
 
 [![Docker](https://github.com/yourusername/ck-pybis-toolkit/actions/workflows/docker.yml/badge.svg)](https://github.com/yourusername/ck-pybis-toolkit/actions/workflows/docker.yml)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/yourusername/ck-pybis-toolkit/releases)
+[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/yourusername/ck-pybis-toolkit/releases)
 
 A command-line interface for OpenBIS operations with enhanced upload functionality, metadata extraction, and automatic file type detection. This toolkit provides comprehensive dataset management capabilities for OpenBIS servers. Built on PyBIS 1.37.3.
 
@@ -37,7 +37,9 @@ Required format:
 OPENBIS_URL="https://your-openbis-server.com/openbis/"
 OPENBIS_USERNAME="your-username"
 OPENBIS_PASSWORD="your-password"
-OPENBIS_WORKSPACE="/openbis"
+
+# Optional: Default download directory
+PYBIS_DOWNLOAD_DIR="~/Downloads/openbis-data"
 ```
 
 ## 📋 Commands
@@ -209,7 +211,9 @@ The credentials file format:
 OPENBIS_URL="https://your-openbis-server.com/openbis/"
 OPENBIS_USERNAME="your_username"
 OPENBIS_PASSWORD="your_password"
-OPENBIS_WORKSPACE="/openbis"
+
+# Optional: Default download directory
+PYBIS_DOWNLOAD_DIR="~/Downloads/openbis-data"
 ```
 
 ### 3. Test Setup

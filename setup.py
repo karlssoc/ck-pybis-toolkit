@@ -12,7 +12,7 @@ long_description = readme_file.read_text() if readme_file.exists() else ""
 
 setup(
     name="ck-pybis-toolkit",
-    version="1.0.0",
+    version="1.0.1",
     description="CK PyBIS Toolkit - Enhanced OpenBIS client for dataset management and debugging",
     long_description=long_description,
     long_description_content_type="text/markdown",

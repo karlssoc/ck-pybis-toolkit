@@ -103,8 +103,8 @@ def pybis_download_main(args):
     """PyBIS Download Tool - Download datasets and files"""
     parser = argparse.ArgumentParser(description='Download datasets and files from OpenBIS')
     parser.add_argument('dataset_code', help='Dataset code to download')
-    parser.add_argument('--output', '-o', default='{{ data_base_dir }}/openbis/', 
-                       help='Output directory (default: {{ data_base_dir }}/openbis/)')
+    parser.add_argument('--output', '-o', default=os.environ.get('PYBIS_DOWNLOAD_DIR', os.path.expanduser('~/data/openbis/')), 
+                       help='Output directory (default: $PYBIS_DOWNLOAD_DIR or ~/data/openbis/)')
     parser.add_argument('--list-only', action='store_true', 
                        help='Only list files, do not download')
     
@@ -126,8 +126,8 @@ def pybis_download_collection_main(args):
     """PyBIS Download Collection Tool - Download all datasets from a collection"""
     parser = argparse.ArgumentParser(description='Download all datasets from an OpenBIS collection')
     parser.add_argument('collection', help='Collection path (required)')
-    parser.add_argument('--output', '-o', default='{{ data_base_dir }}/openbis/', 
-                       help='Output directory (default: {{ data_base_dir }}/openbis/)')
+    parser.add_argument('--output', '-o', default=os.environ.get('PYBIS_DOWNLOAD_DIR', os.path.expanduser('~/data/openbis/')), 
+                       help='Output directory (default: $PYBIS_DOWNLOAD_DIR or ~/data/openbis/)')
     parser.add_argument('--list-only', action='store_true', 
                        help='Only list datasets, do not download')
     parser.add_argument('--limit', type=int, default=None,
