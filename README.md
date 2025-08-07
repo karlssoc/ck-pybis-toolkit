@@ -1,26 +1,26 @@
-# PyBIS CLI Tool
+# CK PyBIS Toolkit
 
-A command-line interface for OpenBIS operations with enhanced upload functionality, metadata extraction, and automatic file type detection.
-
-**Standalone PyBIS development environment extracted from the CKS Ansible container project.** This environment allows for faster iteration, debugging, and testing of PyBIS scripts without container overhead.
+A command-line interface for OpenBIS operations with enhanced upload functionality, metadata extraction, and automatic file type detection. This toolkit provides comprehensive dataset management capabilities for OpenBIS servers.
 
 ## 🚀 Quick Start
 
 ### Installation
 
 ```bash
-# Navigate to the project directory
-cd /Users/medk-cka/Documents/Projects/pybis-1.37.3
+# Clone the repository
+git clone https://github.com/karlssoc/ck-pybis-toolkit.git
+cd ck-pybis-toolkit
 
 # Run the installer
 ./install.sh
 ```
 
 The installer will:
-- Install the `pybis` command to `~/.local/bin/`
-- Use your existing `pybis-1.37.3` conda environment
+- Auto-detect Python 3.7+ and pip
+- Install the `pybis` command system-wide or to `~/.local/bin/`
 - Set up credential loading from `~/.openbis/credentials`
-- Check PATH configuration and provide guidance if needed
+- Provide platform-specific PATH configuration guidance
+- Work on both Linux and macOS
 
 ### Configuration
 
@@ -165,44 +165,48 @@ Extracts from log files:
 - **Extensible design** for adding new file types
 - **Backward compatibility** with existing commands
 
-## Original Purpose
+## Purpose
 
-- **Debug PyBIS download issues** (e.g., working vs failing dataset IDs)
-- **Develop new PyBIS functionality** in a clean environment
-- **Test OpenBIS integrations** with direct Python access
-- **Prototype improvements** before porting back to container deployment
+- **Enhanced OpenBIS client** with comprehensive dataset management
+- **Automated metadata extraction** from FASTA and spectral library files
+- **Cross-platform installation** with robust dependency management
+- **Streamlined workflows** for research data management
 
 ## Files
 
 ### Core Files
-- `pybis_common.py` - Shared PyBIS functionality (copied from Ansible templates)
+- `pybis_common.py` - Shared PyBIS functionality and upload classes
 - `pybis_scripts.py` - Main CLI interface for all PyBIS tools
-- `test_datasets.py` - Test script for debugging download issues
+- `setup.py` - Python package configuration
+- `install.sh` - Enhanced cross-platform installation script
 
 ### Configuration
-- `credentials.example` - OpenBIS credentials template (copied from ~/.openbis/credentials)
+- `credentials.example` - OpenBIS credentials template
+- `.gitignore` - Git ignore patterns for security and cleanliness
 
 ## Setup
 
-### 1. Environment Setup
+### 1. Python Requirements
 ```bash
-# Ensure PyBIS 1.37.3 is available in your conda environment
-conda activate your-pybis-env
-pip install pybis==1.37.3
+# Python 3.7+ required (auto-detected by installer)
+python3 --version
+
+# PyBIS 1.37.3 will be installed automatically
 ```
 
 ### 2. Credentials Configuration
 ```bash
-# Copy and configure credentials
-cp credentials.example ~/.openbis/credentials
-# Edit ~/.openbis/credentials with your OpenBIS connection details
+# The installer creates ~/.openbis/credentials from template
+# Edit with your OpenBIS connection details
+nano ~/.openbis/credentials
 ```
 
-The credentials file should contain:
-```
-OPENBIS_URL=https://your-openbis-server.com
-OPENBIS_USERNAME=your_username
-OPENBIS_PASSWORD=your_password
+The credentials file format:
+```bash
+OPENBIS_URL="https://your-openbis-server.com/openbis/"
+OPENBIS_USERNAME="your_username"
+OPENBIS_PASSWORD="your_password"
+OPENBIS_WORKSPACE="/openbis"
 ```
 
 ### 3. Test Setup
@@ -252,12 +256,13 @@ pybis search "mouse" --type datasets --limit 5 | \
 
 ### Project Structure
 ```
-pybis-1.37.3/
+ck-pybis-toolkit/
 ├── pybis_common.py      # Core functionality and upload classes
 ├── pybis_scripts.py     # CLI command dispatcher
-├── pybis                # Python wrapper script
-├── install.sh           # Installation script
-├── test_datasets.py     # Testing utilities
+├── setup.py             # Python package configuration
+├── install.sh           # Enhanced installation script
+├── credentials.example  # Credentials template
+├── .gitignore          # Git ignore patterns
 └── ~/.openbis/
     └── credentials      # OpenBIS connection details
 ```
@@ -313,21 +318,23 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-**Conda environment issues**:
+**Python/pip issues**:
 ```bash
-# Check if environment exists
-conda env list | grep pybis-1.37.3
+# Check Python version
+python3 --version
 
-# Recreate if needed
-conda create -n pybis-1.37.3 python=3.9
-conda activate pybis-1.37.3
-pip install pybis==1.37.3
+# Install Python if missing
+# Linux: sudo apt install python3 python3-pip
+# macOS: brew install python3
+
+# Try user installation
+pip3 install --user -e .
 ```
 
 **Connection timeouts**:
 - Check VPN connection
 - Verify OpenBIS server URL
-- Test network connectivity: `ping bioms.med.lu.se`
+- Test network connectivity to your OpenBIS server
 
 ## 📚 Examples
 
@@ -392,124 +399,26 @@ pybis upload database.fasta --version "1.0"
 - **Consistent error handling** across all operations  
 - **Automatic metadata extraction** saves manual data entry
 - **Dry-run mode** prevents upload mistakes
-- **Conda environment isolation** ensures dependency consistency
+- **Clean dependency management** with automatic PyBIS installation
 
-## Original Development Notes
-```
+## 🌟 Features
 
-## Usage Examples
+- **Cross-platform compatibility** - Works on Linux and macOS
+- **Automatic dependency management** - Self-installing with robust error handling
+- **Comprehensive metadata extraction** - Automatic parsing of FASTA and spectral library files
+- **Flexible upload system** - Support for multiple file types with auto-detection
+- **Secure credential management** - Encrypted storage with proper file permissions
+- **Collection management** - Batch download and upload operations
+- **Dry-run support** - Preview operations before execution
 
-### Basic Tools
-```bash
-# Test connection
-python pybis_scripts.py connect --verbose
+## 🤝 Contributing
 
-# Search for datasets
-python pybis_scripts.py search proteome --type datasets --limit 5
+This toolkit is designed for research data management. Contributions welcome for:
+- New file type support
+- Enhanced metadata extraction
+- Additional OpenBIS operations
+- Platform compatibility improvements
 
-# Get dataset information
-python pybis_scripts.py info --dataset 20250807085639331-1331542
+## 📄 License
 
-# Download dataset
-python pybis_scripts.py download 20250807085639331-1331542 --output ~/data/
-
-# List dataset files without downloading
-python pybis_scripts.py download 20250807085639331-1331542 --list-only
-```
-
-### Debug Dataset Download Issues
-```bash
-# Run comprehensive test of both working and failing datasets
-python test_datasets.py
-```
-
-This will test:
-- `20250807085639331-1331542` (working dataset)
-- `20250502110701494-1323378` (failing dataset)
-
-### Spectral Library Upload
-```bash
-# Upload library with metadata extraction
-python pybis_scripts.py upload-lib library.speclib --log-file library.log.txt
-
-# Preview metadata without uploading
-python pybis_scripts.py upload-lib library.speclib --log-file library.log.txt --dry-run
-
-# Upload with custom name
-python pybis_scripts.py upload-lib library.speclib \
-    --name "Yeast Comprehensive Library v2025" \
-    --notes "Enhanced library with modifications"
-```
-
-## Debugging Workflow
-
-### 1. Issue Reproduction
-```bash
-# Test both datasets to confirm the issue
-python test_datasets.py
-```
-
-### 2. Detailed Investigation
-```bash
-# Get detailed dataset info
-python pybis_scripts.py info --dataset 20250502110701494-1323378
-
-# Try listing files
-python pybis_scripts.py download 20250502110701494-1323378 --list-only
-```
-
-### 3. PyBIS API Exploration
-```bash
-# Start interactive Python session
-python
->>> from pybis_common import get_openbis_connection
->>> o = get_openbis_connection()
->>> dataset = o.get_dataset('20250502110701494-1323378')
->>> # Investigate dataset object properties
->>> dir(dataset)
->>> dataset.props
->>> dataset.type
-```
-
-## Development Benefits
-
-- **No container rebuild** for script changes
-- **Full IDE support** with breakpoints and debugging
-- **Direct library access** for API exploration
-- **Fast iteration** for testing fixes
-- **Clean environment** separate from production deployment
-
-## Porting Back to Ansible
-
-Once you've developed and tested improvements:
-
-1. **Update the Ansible templates** in the main project:
-   - `templates/pybis_common.py.j2`
-   - `templates/container-script.py.j2`
-
-2. **Test in container environment**:
-   ```bash
-   cd /Users/medk-cka/cks-ansible
-   ansible-playbook -i inventory/hosts.yml playbooks/deploy-containers.yml
-   ```
-
-3. **Verify fixes work** in the deployed container scripts
-
-## Known Issues to Debug
-
-### Dataset Download Problem
-- **Working**: `20250807085639331-1331542`
-- **Failing**: `20250502110701494-1323378`
-
-Potential causes to investigate:
-- Dataset type differences
-- File permissions or access rights
-- Dataset state (archived, deleted, etc.)
-- PyBIS API version compatibility
-- OpenBIS server-side issues
-
-### Questions to Answer
-1. What's different about the failing dataset?
-2. Does `dataset.get_files()` work for the failing dataset?
-3. Are there error messages in the PyBIS logs?
-4. Does the issue occur with other similar datasets?
+This project is intended for research use. Please ensure compliance with your institution's data management policies when handling sensitive datasets.
