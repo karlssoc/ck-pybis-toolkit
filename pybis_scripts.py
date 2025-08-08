@@ -37,11 +37,12 @@ def main():
         print("=" * 40)
         print("Available tools:")
         print("  connect            - Test OpenBIS connection")
-        print("  search             - Search experiments, samples, datasets")
+        print("  config             - Manage configuration (oBIS-inspired JSON)")
+        print("  search             - Enhanced search with advanced filtering")
         print("  download           - Download datasets")
         print("  download-collection - Download all datasets from a collection")
         print("  info               - Get detailed object information")
-        print("  upload             - Upload files (auto-detects type)")
+        print("  upload             - Upload files with auto-linking (auto-detects type)")
         print("  upload-lib         - Upload spectral libraries")
         print("  upload-fasta       - Upload FASTA database files")
         print()
@@ -57,6 +58,8 @@ def main():
     # Route to appropriate tool function
     if tool == "connect":
         pybis_connect_main(args)
+    elif tool == "config":
+        pybis_config_main(args)
     elif tool == "search":
         pybis_search_main(args)
     elif tool == "download":
@@ -73,7 +76,7 @@ def main():
         pybis_upload_fasta_main(args)
     else:
         print(f"❌ Unknown tool: {tool}")
-        print("Available tools: connect, search, download, download-collection, info, upload, upload-lib, upload-fasta")
+        print("Available tools: connect, config, search, download, download-collection, info, upload, upload-lib, upload-fasta")
         sys.exit(1)
 
 if __name__ == "__main__":

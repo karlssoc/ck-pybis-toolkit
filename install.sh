@@ -87,16 +87,37 @@ fi
 echo "🔗 Setting up command access..."
 mkdir -p "$HOME/.local/bin"
 
-# Try to find the installed pybis command
+# Try to find the installed pybis command (excluding the symlink we're about to create)
 PYBIS_LOCATION=""
-for location in "$HOME/.local/bin/pybis" "$(which pybis 2>/dev/null)"; do
-    if [ -n "$location" ] && [ -x "$location" ]; then
+for location in "$(which pybis 2>/dev/null)"; do
+    # Skip if it's the symlink we're trying to create
+    if [ -n "$location" ] && [ -x "$location" ] && [ "$location" != "$HOME/.local/bin/pybis" ]; then
         PYBIS_LOCATION="$location"
         break
     fi
 done
 
-if [ -n "$PYBIS_LOCATION" ]; then
+# If we couldn't find it, try Python module execution
+if [ -z "$PYBIS_LOCATION" ]; then
+    # Test if the module is available
+    if eval "$PYTHON_CMD -c 'import pybis_scripts'" 2>/dev/null; then
+        # Create a wrapper script instead of a symlink
+        cat > "$HOME/.local/bin/pybis" << EOF
+#!/bin/bash
+exec $PYTHON_CMD -c "
+import sys
+import pybis_scripts
+sys.exit(pybis_scripts.main())
+" "\$@"
+EOF
+        chmod +x "$HOME/.local/bin/pybis"
+        echo "✅ Command wrapper created: ~/.local/bin/pybis"
+    else
+        echo "⚠️  Could not locate pybis command automatically"
+    fi
+elif [ -n "$PYBIS_LOCATION" ]; then
+    # Remove existing symlink if it exists
+    rm -f "$HOME/.local/bin/pybis"
     ln -sf "$PYBIS_LOCATION" "$HOME/.local/bin/pybis"
     echo "✅ Command linked: ~/.local/bin/pybis"
 else

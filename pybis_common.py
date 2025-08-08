@@ -8,19 +8,92 @@ import os
 import sys
 import argparse
 import re
+import time
 from pathlib import Path
 
-def get_openbis_connection():
-    """Get authenticated OpenBIS connection with token caching"""
+def _load_credentials_if_available():
+    """Load credentials from configuration files (oBIS-inspired JSON + legacy support)"""
+    # Try JSON config first (oBIS-style)
+    json_config = _load_json_config()
+    if json_config:
+        for key, value in json_config.items():
+            if key.upper() in ['OPENBIS_URL', 'OPENBIS_USERNAME', 'OPENBIS_PASSWORD', 'PYBIS_DOWNLOAD_DIR', 'PYBIS_VERIFY_CERTIFICATES']:
+                os.environ[key.upper()] = str(value)
+    
+    # Fall back to legacy credentials file (backward compatibility)
+    creds_file = Path.home() / '.openbis' / 'credentials'
+    if creds_file.exists():
+        with open(creds_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    # Remove quotes if present
+                    value = value.strip().strip('"').strip("'")
+                    os.environ[key] = value
+
+def _load_json_config():
+    """Load JSON configuration files (oBIS-inspired)"""
+    config = {}
+    
+    # Global config from ~/.pybis/config.json (similar to oBIS ~/.obis)
+    global_config_file = Path.home() / '.pybis' / 'config.json'
+    if global_config_file.exists():
+        try:
+            import json
+            with open(global_config_file) as f:
+                global_config = json.load(f)
+                config.update(global_config)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not load global config: {e}")
+    
+    # Local config from ./.pybis/config.json (project-specific)
+    local_config_file = Path('.pybis') / 'config.json'
+    if local_config_file.exists():
+        try:
+            import json
+            with open(local_config_file) as f:
+                local_config = json.load(f)
+                config.update(local_config)  # Local overrides global
+        except Exception as e:
+            print(f"⚠️  Warning: Could not load local config: {e}")
+    
+    return config
+
+def _get_config_value(key, default=None):
+    """Get configuration value with priority: env > local JSON > global JSON > default"""
+    # Environment variables have highest priority
+    if key.upper() in os.environ:
+        return os.environ[key.upper()]
+    
+    # Try JSON config
+    config = _load_json_config()
+    return config.get(key.lower(), config.get(key.upper(), default))
+
+def get_openbis_connection(use_cache=True):
+    """Get authenticated OpenBIS connection with token caching and performance options"""
+    # Try to load credentials if not in environment
+    if not os.environ.get('OPENBIS_URL'):
+        _load_credentials_if_available()
+    
     url = os.environ.get('OPENBIS_URL')
     username = os.environ.get('OPENBIS_USERNAME')
     password = os.environ.get('OPENBIS_PASSWORD')
     
     if not all([url, username, password]):
         print("❌ Missing OpenBIS credentials in environment")
+        print("💡 Make sure ~/.openbis/credentials exists or use 'pybis config' to configure")
         sys.exit(1)
     
-    o = Openbis(url, verify_certificates=False)
+    # Get certificate verification setting (default: False for backward compatibility)
+    verify_certs_str = os.environ.get('PYBIS_VERIFY_CERTIFICATES', 'false').lower()
+    verify_certificates = verify_certs_str in ['true', '1', 'yes', 'on']
+    
+    # Performance optimization: configurable cache for large systems
+    use_cache_str = os.environ.get('PYBIS_USE_CACHE', str(use_cache)).lower()
+    use_cache_final = use_cache_str in ['true', '1', 'yes', 'on']
+    
+    o = Openbis(url, verify_certificates=verify_certificates, use_cache=use_cache_final)
     
     try:
         # Try to use existing token first
@@ -70,34 +143,318 @@ def pybis_connect_main(args):
         sys.exit(1)
 
 def pybis_search_main(args):
-    """PyBIS Search Tool - Search for experiments, samples, and datasets"""
-    parser = argparse.ArgumentParser(description='Search OpenBIS for experiments, samples, and datasets')
-    parser.add_argument('query', help='Search query (supports wildcards)')
+    """PyBIS Search Tool - Enhanced search with oBIS-style filtering capabilities"""
+    parser = argparse.ArgumentParser(description='Search OpenBIS with advanced filtering (inspired by oBIS)')
+    
+    # Basic search parameters
+    parser.add_argument('query', nargs='?', help='Search query (supports wildcards)')
     parser.add_argument('--type', choices=['experiments', 'samples', 'datasets', 'all'], 
                        default='all', help='What to search for')
     parser.add_argument('--limit', type=int, default=10, help='Maximum results to show')
+    parser.add_argument('--save', help='Save results to CSV file')
+    
+    # Relationship queries
+    parser.add_argument('--children-of', help='Find children of specified dataset')
+    parser.add_argument('--parents-of', help='Find parents of specified dataset')
+    
+    # Advanced filtering (oBIS-inspired)
+    parser.add_argument('--space', help='Filter by space code')
+    parser.add_argument('--project', help='Filter by project code') 
+    parser.add_argument('--collection', help='Filter by collection/experiment path')
+    parser.add_argument('--dataset-type', help='Filter by dataset type code')
+    parser.add_argument('--property', help='Filter by property code')
+    parser.add_argument('--property-value', help='Filter by property value')
+    parser.add_argument('--registration-date', help='Filter by registration date (format: ">YYYY-MM-DD" or "<YYYY-MM-DD")')
+    parser.add_argument('--recursive', '-r', action='store_true', help='Search recursively through child objects')
     
     parsed_args = parser.parse_args(args)
     
-    print(f"🔍 OpenBIS Search Tool")
+    print(f"🔍 Enhanced OpenBIS Search Tool")
+    
+    # Handle relationship queries
+    if parsed_args.children_of or parsed_args.parents_of:
+        o = get_openbis_connection()
+        
+        if parsed_args.children_of:
+            print(f"Finding children of dataset: {parsed_args.children_of}")
+            print("=" * 50)
+            results = _search_dataset_children(o, parsed_args.children_of)
+            if parsed_args.save and results:
+                _save_search_results(results, parsed_args.save, 'children')
+        
+        if parsed_args.parents_of:
+            print(f"Finding parents of dataset: {parsed_args.parents_of}")
+            print("=" * 50)
+            results = _search_dataset_parents(o, parsed_args.parents_of)
+            if parsed_args.save and results:
+                _save_search_results(results, parsed_args.save, 'parents')
+        
+        return
+    
+    # Check if any advanced filters are provided
+    has_advanced_filters = any([
+        parsed_args.space, parsed_args.project, parsed_args.collection,
+        parsed_args.dataset_type, parsed_args.property, parsed_args.property_value,
+        parsed_args.registration_date
+    ])
+    
+    # Handle advanced filtered search
+    if has_advanced_filters:
+        print("Using advanced filtering...")
+        _show_search_filters(parsed_args)
+        print("=" * 50)
+        
+        o = get_openbis_connection()
+        results = _advanced_search(o, parsed_args)
+        
+        if parsed_args.save and results:
+            _save_search_results(results, parsed_args.save, 'advanced_search')
+        return
+    
+    # Handle regular search
+    if not parsed_args.query:
+        print("❌ Must specify query or use filtering options")
+        print("💡 Use --help to see available filtering options")
+        return
+        
     print(f"Query: {parsed_args.query}")
     print(f"Type: {parsed_args.type}")
     print("=" * 50)
     
     o = get_openbis_connection()
+    all_results = []
     
     if parsed_args.type in ['experiments', 'all']:
-        _search_experiments(o, parsed_args.query)
+        results = _search_experiments(o, parsed_args.query, parsed_args.limit)
+        all_results.extend(results or [])
         if parsed_args.type == 'all':
             print()
     
     if parsed_args.type in ['samples', 'all']:
-        _search_samples(o, parsed_args.query)
+        results = _search_samples(o, parsed_args.query, parsed_args.limit)
+        all_results.extend(results or [])
         if parsed_args.type == 'all':
             print()
     
     if parsed_args.type in ['datasets', 'all']:
-        _search_datasets(o, parsed_args.query)
+        results = _search_datasets(o, parsed_args.query, parsed_args.limit)
+        all_results.extend(results or [])
+    
+    if parsed_args.save and all_results:
+        _save_search_results(all_results, parsed_args.save, 'basic_search')
+
+def pybis_config_main(args):
+    """PyBIS Config Tool - Manage JSON-based configuration (oBIS-inspired)"""
+    parser = argparse.ArgumentParser(description='Manage PyBIS configuration settings')
+    parser.add_argument('action', choices=['get', 'set', 'clear', 'list', 'init'], 
+                       help='Configuration action')
+    parser.add_argument('key', nargs='?', help='Configuration key')
+    parser.add_argument('value', nargs='?', help='Configuration value (for set action)')
+    parser.add_argument('-g', '--global', dest='global_scope', action='store_true',
+                       help='Use global configuration (~/.pybis/config.json)')
+    parser.add_argument('--init-example', action='store_true',
+                       help='Initialize with example configuration')
+    
+    parsed_args = parser.parse_args(args)
+    
+    print(f"⚙️  PyBIS Configuration Manager")
+    
+    scope = "global" if parsed_args.global_scope else "local"
+    config_file = _get_config_file_path(parsed_args.global_scope)
+    
+    if parsed_args.action == 'init':
+        _init_config(config_file, parsed_args.init_example)
+    elif parsed_args.action == 'list':
+        _list_config(parsed_args.global_scope)
+    elif parsed_args.action == 'get':
+        _get_config(parsed_args.key, parsed_args.global_scope)
+    elif parsed_args.action == 'set':
+        if not parsed_args.key or parsed_args.value is None:
+            print("❌ Both key and value required for 'set' action")
+            return
+        _set_config(parsed_args.key, parsed_args.value, parsed_args.global_scope)
+    elif parsed_args.action == 'clear':
+        if not parsed_args.key:
+            print("❌ Key required for 'clear' action")
+            return
+        _clear_config(parsed_args.key, parsed_args.global_scope)
+
+def _get_config_file_path(global_scope):
+    """Get path to config file based on scope"""
+    if global_scope:
+        config_dir = Path.home() / '.pybis'
+    else:
+        config_dir = Path('.pybis')
+    
+    return config_dir / 'config.json'
+
+def _ensure_config_dir(config_file):
+    """Ensure config directory exists"""
+    config_file.parent.mkdir(parents=True, exist_ok=True)
+
+def _load_config_file(config_file):
+    """Load JSON config file"""
+    if not config_file.exists():
+        return {}
+    
+    try:
+        import json
+        with open(config_file) as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"❌ Error loading config: {e}")
+        return {}
+
+def _save_config_file(config_file, config):
+    """Save JSON config file"""
+    try:
+        import json
+        _ensure_config_dir(config_file)
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"❌ Error saving config: {e}")
+        return False
+
+def _init_config(config_file, with_example):
+    """Initialize configuration file"""
+    scope = "global" if "pybis" in str(config_file.parent) else "local"
+    
+    if config_file.exists():
+        print(f"⚠️  {scope.title()} config already exists: {config_file}")
+        return
+    
+    config = {}
+    if with_example:
+        config = {
+            "openbis_url": "https://your-server.com/openbis/",
+            "openbis_username": "your-username",
+            "openbis_password": "your-password",
+            "pybis_download_dir": "~/data/openbis/",
+            "pybis_verify_certificates": False,
+            "pybis_use_cache": True,
+            "auto_link_parents": False,
+            "default_collections": {
+                "fasta": "/DDB/CK/FASTA",
+                "spectral_library": "/DDB/CK/PREDSPECLIB",
+                "unknown": "/DDB/CK/UNKNOWN"
+            },
+            "search": {
+                "default_limit": 10,
+                "save_format": "csv"
+            }
+        }
+    
+    if _save_config_file(config_file, config):
+        print(f"✅ Initialized {scope} config: {config_file}")
+        if with_example:
+            print("💡 Please edit the config file to add your OpenBIS credentials")
+    else:
+        print(f"❌ Failed to initialize {scope} config")
+
+def _list_config(global_scope):
+    """List all configuration settings"""
+    scope = "global" if global_scope else "local"
+    config_file = _get_config_file_path(global_scope)
+    
+    print(f"📋 {scope.title()} configuration ({config_file}):")
+    print("=" * 60)
+    
+    config = _load_config_file(config_file)
+    
+    if not config:
+        print("  (No configuration found)")
+        print(f"💡 Initialize with: pybis config init {'-g' if global_scope else ''}")
+        return
+    
+    def print_nested(obj, indent=0):
+        for key, value in obj.items():
+            if isinstance(value, dict):
+                print("  " * indent + f"📁 {key}:")
+                print_nested(value, indent + 1)
+            else:
+                print("  " * indent + f"🔧 {key}: {value}")
+    
+    print_nested(config)
+
+def _get_config(key, global_scope):
+    """Get configuration value"""
+    if not key:
+        _list_config(global_scope)
+        return
+    
+    scope = "global" if global_scope else "local"
+    config_file = _get_config_file_path(global_scope)
+    config = _load_config_file(config_file)
+    
+    # Support nested keys with dot notation
+    keys = key.split('.')
+    value = config
+    
+    try:
+        for k in keys:
+            value = value[k]
+        print(f"🔧 {key} ({scope}): {value}")
+    except (KeyError, TypeError):
+        print(f"❌ Configuration key '{key}' not found in {scope} config")
+
+def _set_config(key, value, global_scope):
+    """Set configuration value"""
+    scope = "global" if global_scope else "local"
+    config_file = _get_config_file_path(global_scope)
+    config = _load_config_file(config_file)
+    
+    # Support nested keys with dot notation
+    keys = key.split('.')
+    current = config
+    
+    # Navigate to parent of target key
+    for k in keys[:-1]:
+        if k not in current:
+            current[k] = {}
+        current = current[k]
+    
+    # Convert value type if needed
+    if value.lower() in ['true', 'false']:
+        value = value.lower() == 'true'
+    elif value.isdigit():
+        value = int(value)
+    elif value.replace('.', '').isdigit():
+        value = float(value)
+    
+    # Set the value
+    current[keys[-1]] = value
+    
+    if _save_config_file(config_file, config):
+        print(f"✅ Set {key} = {value} ({scope})")
+    else:
+        print(f"❌ Failed to set {key}")
+
+def _clear_config(key, global_scope):
+    """Clear configuration value"""
+    scope = "global" if global_scope else "local"
+    config_file = _get_config_file_path(global_scope)
+    config = _load_config_file(config_file)
+    
+    # Support nested keys with dot notation
+    keys = key.split('.')
+    current = config
+    
+    try:
+        # Navigate to parent of target key
+        for k in keys[:-1]:
+            current = current[k]
+        
+        # Delete the key
+        del current[keys[-1]]
+        
+        if _save_config_file(config_file, config):
+            print(f"✅ Cleared {key} ({scope})")
+        else:
+            print(f"❌ Failed to clear {key}")
+    except (KeyError, TypeError):
+        print(f"❌ Configuration key '{key}' not found in {scope} config")
 
 def pybis_download_main(args):
     """PyBIS Download Tool - Download datasets and files"""
@@ -153,6 +510,7 @@ def pybis_info_main(args):
     parser.add_argument('--spaces', action='store_true', help='Show all spaces')
     parser.add_argument('--dataset', help='Show dataset information')
     parser.add_argument('--sample', help='Show sample information')
+    parser.add_argument('--show-lineage', action='store_true', help='Show parent-child relationships for dataset')
     
     parsed_args = parser.parse_args(args)
     
@@ -169,7 +527,7 @@ def pybis_info_main(args):
         _show_spaces_info(o)
     
     if parsed_args.dataset:
-        _show_dataset_info(o, parsed_args.dataset)
+        _show_dataset_info(o, parsed_args.dataset, show_lineage=parsed_args.show_lineage)
     
     if parsed_args.sample:
         _show_sample_info(o, parsed_args.sample)
@@ -178,71 +536,736 @@ def pybis_info_main(args):
 # HELPER FUNCTIONS
 # ============================================================================
 
-def _search_experiments(o, query):
+def _search_experiments(o, query, limit=10):
     """Search for experiments"""
     print(f"🔬 Searching experiments for: {query}")
     try:
         experiments = o.get_experiments(code=f"*{query}*")
         print(f"Found {len(experiments)} experiments")
+        results = []
         
         if len(experiments) > 0:
+            display_limit = min(limit, len(experiments))
             if hasattr(experiments, 'head'):
-                for i, (idx, exp) in enumerate(experiments.head(10).iterrows()):
+                for i, (idx, exp) in enumerate(experiments.head(display_limit).iterrows()):
                     code = getattr(exp, 'code', 'N/A')
                     exp_type = getattr(exp, 'type', 'N/A')
                     print(f"  - {code} ({exp_type})")
+                    results.append({'type': 'experiment', 'code': code, 'object_type': exp_type})
             else:
-                for exp in experiments[:10]:
+                for i, exp in enumerate(experiments[:display_limit]):
                     code = getattr(exp, 'code', 'N/A')
                     exp_type = getattr(exp, 'type', 'N/A')
                     print(f"  - {code} ({exp_type})")
+                    results.append({'type': 'experiment', 'code': code, 'object_type': exp_type})
+            
+            if len(experiments) > display_limit:
+                print(f"  ... and {len(experiments) - display_limit} more experiments")
+        
+        return results
                     
     except Exception as e:
         print(f"❌ Experiment search failed: {e}")
+        return []
 
-def _search_samples(o, query):
+def _search_samples(o, query, limit=10):
     """Search for samples"""
     print(f"🧪 Searching samples for: {query}")
     try:
         samples = o.get_samples(code=f"*{query}*")
         print(f"Found {len(samples)} samples")
+        results = []
         
         if len(samples) > 0:
+            display_limit = min(limit, len(samples))
             if hasattr(samples, 'head'):
-                for i, (idx, sample) in enumerate(samples.head(10).iterrows()):
+                for i, (idx, sample) in enumerate(samples.head(display_limit).iterrows()):
                     code = getattr(sample, 'code', 'N/A')
                     sample_type = getattr(sample, 'type', 'N/A')
                     print(f"  - {code} ({sample_type})")
+                    results.append({'type': 'sample', 'code': code, 'object_type': sample_type})
             else:
-                for sample in samples[:10]:
+                for i, sample in enumerate(samples[:display_limit]):
                     code = getattr(sample, 'code', 'N/A')
                     sample_type = getattr(sample, 'type', 'N/A')
                     print(f"  - {code} ({sample_type})")
+                    results.append({'type': 'sample', 'code': code, 'object_type': sample_type})
+            
+            if len(samples) > display_limit:
+                print(f"  ... and {len(samples) - display_limit} more samples")
+        
+        return results
                     
     except Exception as e:
         print(f"❌ Sample search failed: {e}")
+        return []
 
-def _search_datasets(o, query):
+def _search_datasets(o, query, limit=10):
     """Search for datasets"""
     print(f"📊 Searching datasets for: {query}")
     try:
         datasets = o.get_datasets(code=f"*{query}*")
         print(f"Found {len(datasets)} datasets")
+        results = []
         
         if len(datasets) > 0:
+            display_limit = min(limit, len(datasets))
             if hasattr(datasets, 'head'):
-                for i, (idx, ds) in enumerate(datasets.head(10).iterrows()):
+                for i, (idx, ds) in enumerate(datasets.head(display_limit).iterrows()):
                     code = getattr(ds, 'code', 'N/A')
                     ds_type = getattr(ds, 'type', 'N/A')
                     print(f"  - {code} ({ds_type})")
+                    results.append({'type': 'dataset', 'code': code, 'object_type': ds_type})
             else:
-                for ds in datasets[:10]:
+                for i, ds in enumerate(datasets[:display_limit]):
                     code = getattr(ds, 'code', 'N/A')
                     ds_type = getattr(ds, 'type', 'N/A')
                     print(f"  - {code} ({ds_type})")
+                    results.append({'type': 'dataset', 'code': code, 'object_type': ds_type})
+            
+            if len(datasets) > display_limit:
+                print(f"  ... and {len(datasets) - display_limit} more datasets")
+        
+        return results
                     
     except Exception as e:
         print(f"❌ Dataset search failed: {e}")
+        return []
+
+# ============================================================================
+# ENHANCED SEARCH FUNCTIONS (oBIS-INSPIRED)
+# ============================================================================
+
+def _show_search_filters(args):
+    """Display active search filters"""
+    filters = []
+    if args.space:
+        filters.append(f"Space: {args.space}")
+    if args.project:
+        filters.append(f"Project: {args.project}")
+    if args.collection:
+        filters.append(f"Collection: {args.collection}")
+    if args.dataset_type:
+        filters.append(f"Dataset Type: {args.dataset_type}")
+    if args.property:
+        filters.append(f"Property: {args.property}")
+    if args.property_value:
+        filters.append(f"Property Value: {args.property_value}")
+    if args.registration_date:
+        filters.append(f"Registration Date: {args.registration_date}")
+    if args.recursive:
+        filters.append("Recursive: Yes")
+    
+    if filters:
+        print("🔧 Active Filters:")
+        for f in filters:
+            print(f"  • {f}")
+
+def _advanced_search(o, args):
+    """Perform advanced search with filtering (oBIS-inspired)"""
+    results = []
+    
+    try:
+        # Build search parameters for PyBIS
+        search_params = {}
+        
+        if args.space:
+            search_params['space'] = args.space
+        if args.project:
+            search_params['project'] = args.project
+        if args.collection:
+            search_params['experiment'] = args.collection
+        if args.dataset_type:
+            search_params['type'] = args.dataset_type
+            
+        # Search datasets with basic filters
+        if args.type in ['datasets', 'all']:
+            print(f"📊 Advanced dataset search...")
+            try:
+                datasets = o.get_datasets(**search_params)
+                
+                # Apply additional filters
+                filtered_datasets = _apply_advanced_filters(datasets, args)
+                
+                print(f"Found {len(filtered_datasets)} datasets after filtering")
+                display_limit = min(args.limit, len(filtered_datasets))
+                
+                for i, ds in enumerate(filtered_datasets[:display_limit]):
+                    code = getattr(ds, 'code', 'N/A')
+                    ds_type = getattr(ds, 'type', 'N/A')
+                    reg_date = str(getattr(ds, 'registrationDate', 'N/A'))[:10]
+                    print(f"  📊 {code} ({ds_type}) - {reg_date}")
+                    results.append({
+                        'type': 'dataset', 
+                        'code': code, 
+                        'object_type': ds_type,
+                        'registration_date': reg_date
+                    })
+                
+                if len(filtered_datasets) > display_limit:
+                    print(f"  ... and {len(filtered_datasets) - display_limit} more datasets")
+                    
+            except Exception as e:
+                print(f"❌ Advanced dataset search failed: {e}")
+        
+        # Search samples if requested
+        if args.type in ['samples', 'all']:
+            print(f"🧪 Advanced sample search...")
+            try:
+                # Remove dataset-specific parameters for sample search
+                sample_params = {k: v for k, v in search_params.items() 
+                               if k not in ['type']}  # type is dataset-specific
+                samples = o.get_samples(**sample_params)
+                
+                filtered_samples = _apply_advanced_filters(samples, args)
+                print(f"Found {len(filtered_samples)} samples after filtering")
+                display_limit = min(args.limit, len(filtered_samples))
+                
+                for i, sample in enumerate(filtered_samples[:display_limit]):
+                    code = getattr(sample, 'code', 'N/A')
+                    sample_type = getattr(sample, 'type', 'N/A')
+                    reg_date = str(getattr(sample, 'registrationDate', 'N/A'))[:10]
+                    print(f"  🧪 {code} ({sample_type}) - {reg_date}")
+                    results.append({
+                        'type': 'sample',
+                        'code': code, 
+                        'object_type': sample_type,
+                        'registration_date': reg_date
+                    })
+                
+                if len(filtered_samples) > display_limit:
+                    print(f"  ... and {len(filtered_samples) - display_limit} more samples")
+                    
+            except Exception as e:
+                print(f"❌ Advanced sample search failed: {e}")
+        
+        return results
+        
+    except Exception as e:
+        print(f"❌ Advanced search failed: {e}")
+        return []
+
+def _apply_advanced_filters(objects, args):
+    """Apply property and date filters to search results"""
+    if not objects or len(objects) == 0:
+        return []
+    
+    filtered = []
+    
+    # Convert to list if it's a DataFrame
+    if hasattr(objects, 'iterrows'):
+        object_list = [row for idx, row in objects.iterrows()]
+    else:
+        object_list = list(objects) if hasattr(objects, '__iter__') else [objects]
+    
+    for obj in object_list:
+        include = True
+        
+        # Filter by property
+        if args.property and args.property_value:
+            try:
+                if hasattr(obj, 'properties') and obj.properties:
+                    props = obj.properties
+                    if hasattr(props, 'get'):
+                        prop_value = props.get(args.property)
+                    else:
+                        prop_value = getattr(props, args.property, None)
+                    
+                    if not prop_value or str(prop_value).lower() != args.property_value.lower():
+                        include = False
+                else:
+                    include = False
+            except:
+                include = False
+        
+        # Filter by registration date
+        if args.registration_date and include:
+            try:
+                reg_date = getattr(obj, 'registrationDate', None)
+                if reg_date:
+                    reg_date_str = str(reg_date)[:10]  # YYYY-MM-DD format
+                    if args.registration_date.startswith('>'):
+                        target_date = args.registration_date[1:]
+                        if reg_date_str <= target_date:
+                            include = False
+                    elif args.registration_date.startswith('<'):
+                        target_date = args.registration_date[1:]
+                        if reg_date_str >= target_date:
+                            include = False
+            except:
+                pass
+        
+        if include:
+            filtered.append(obj)
+    
+    return filtered
+
+def _save_search_results(results, filename, search_type):
+    """Save search results to CSV file (oBIS-inspired)"""
+    if not results:
+        print("⚠️  No results to save")
+        return
+    
+    try:
+        import csv
+        with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+            if results:
+                fieldnames = results[0].keys()
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(results)
+                
+        print(f"💾 Saved {len(results)} results to {filename}")
+        
+    except Exception as e:
+        print(f"❌ Failed to save results: {e}")
+
+# ============================================================================
+# ENHANCED PARENT-CHILD RELATIONSHIP MANAGEMENT
+# ============================================================================
+
+# Global relationship cache for performance optimization
+_relationship_cache = {}
+_cache_timestamps = {}
+CACHE_EXPIRY_MINUTES = 15
+
+def _get_relationship_cache(cache_key):
+    """Get cached relationship data if still valid"""
+    import time
+    current_time = time.time()
+    
+    if (cache_key in _relationship_cache and 
+        cache_key in _cache_timestamps and
+        current_time - _cache_timestamps[cache_key] < CACHE_EXPIRY_MINUTES * 60):
+        return _relationship_cache[cache_key]
+    return None
+
+def _set_relationship_cache(cache_key, data):
+    """Cache relationship data with timestamp"""
+    import time
+    _relationship_cache[cache_key] = data
+    _cache_timestamps[cache_key] = time.time()
+
+def _process_relationship_results(results):
+    """Efficiently process relationship query results"""
+    processed = []
+    
+    try:
+        if hasattr(results, 'iterrows'):
+            # DataFrame format
+            for idx, item in results.iterrows():
+                processed.append({
+                    'code': getattr(item, 'code', 'N/A'),
+                    'type': getattr(item, 'type', 'Unknown'),
+                    'name': getattr(item, 'name', '') or '',
+                    'registration_date': str(getattr(item, 'registrationDate', ''))[:10]
+                })
+        else:
+            # List or other iterable format
+            for item in results:
+                processed.append({
+                    'code': getattr(item, 'code', str(item)),
+                    'type': getattr(item, 'type', 'Unknown'),
+                    'name': getattr(item, 'name', '') or '',
+                    'registration_date': str(getattr(item, 'registrationDate', ''))[:10]
+                })
+    except Exception as e:
+        print(f"⚠️  Warning: Error processing results: {e}")
+        # Fallback to simple list
+        processed = [{'code': str(r), 'type': 'Unknown', 'name': '', 'registration_date': ''} for r in results]
+    
+    return processed
+
+def _display_relationship_results(results, relationship_type, emoji):
+    """Display relationship results with optimized formatting"""
+    if not results:
+        return
+        
+    display_limit = min(10, len(results))
+    
+    for i, item in enumerate(results[:display_limit]):
+        code = item.get('code', 'N/A')
+        data_type = item.get('type', 'Unknown')
+        reg_date = item.get('registration_date', '')
+        name = item.get('name', '')
+        
+        # Show name if available and different from code
+        display_name = f" - {name}" if name and name != code else ""
+        
+        print(f"  📊 {code} ({data_type}) - {reg_date}{display_name}")
+    
+    if len(results) > display_limit:
+        print(f"  ... and {len(results) - display_limit} more {relationship_type}s")
+
+def _batch_process_parent_suggestions(o, datasets, search_terms):
+    """Batch process multiple datasets for parent suggestions (performance optimization)"""
+    suggestions = []
+    
+    try:
+        # Single query for all BIO_DB datasets
+        all_bio_datasets = o.get_datasets(type='BIO_DB')
+        
+        # Pre-process dataset attributes for faster matching
+        bio_dataset_data = []
+        for ds in (all_bio_datasets if hasattr(all_bio_datasets, '__iter__') else [all_bio_datasets]):
+            if not ds:
+                continue
+                
+            ds_info = {
+                'code': getattr(ds, 'code', ''),
+                'name': getattr(ds, 'name', '') or '',
+                'registration_date': str(getattr(ds, 'registrationDate', ''))[:10],
+                'properties': {}
+            }
+            
+            # Cache properties for faster lookups
+            if hasattr(ds, 'properties') and ds.properties:
+                try:
+                    props = ds.properties
+                    if hasattr(props, 'items'):
+                        ds_info['properties'] = {k: str(v).lower() for k, v in props.items()}
+                    else:
+                        # Handle property objects
+                        ds_info['properties'] = {attr: str(getattr(props, attr, '')).lower() 
+                                               for attr in dir(props) if not attr.startswith('_')}
+                except:
+                    pass
+            
+            bio_dataset_data.append(ds_info)
+        
+        # Batch match against all search terms
+        for term in search_terms:
+            term_lower = term.lower()
+            
+            for ds_info in bio_dataset_data:
+                match_found = False
+                match_reason = ""
+                
+                # Check code/name matches
+                if (term_lower in ds_info['code'].lower() or 
+                    term_lower in ds_info['name'].lower()):
+                    match_found = True
+                    match_reason = f"Name/code match: {term}"
+                
+                # Check property matches
+                if not match_found:
+                    for prop_key, prop_value in ds_info['properties'].items():
+                        if term_lower in prop_value:
+                            match_found = True
+                            match_reason = f"Property match ({prop_key}): {term}"
+                            break
+                
+                if match_found:
+                    suggestions.append({
+                        'code': ds_info['code'],
+                        'name': ds_info['name'],
+                        'type': 'BIO_DB',
+                        'registration_date': ds_info['registration_date'],
+                        'match_reason': match_reason,
+                        'confidence': 'high' if term_lower in ds_info['name'].lower() else 'medium'
+                    })
+                    
+                    if len(suggestions) >= 10:  # Limit total suggestions
+                        break
+            
+            if len(suggestions) >= 10:
+                break
+                
+    except Exception as e:
+        print(f"⚠️  Batch processing failed, falling back to individual queries: {e}")
+    
+    return suggestions[:5]  # Return top 5
+
+def _suggest_parent_datasets(o, file_path, file_type, kwargs):
+    """Suggest potential parent datasets based on file metadata and type"""
+    suggestions = []
+    
+    try:
+        if file_type == 'spectral_library':
+            # For spectral libraries, look for referenced FASTA databases
+            suggestions = _suggest_fasta_parents(o, file_path, kwargs.get('log_file'))
+        elif file_type == 'fasta':
+            # For FASTA files, look for version relationships or similar databases
+            suggestions = _suggest_fasta_version_parents(o, file_path, kwargs.get('version'))
+        
+        return suggestions[:5]  # Limit to top 5 suggestions
+        
+    except Exception as e:
+        print(f"⚠️  Warning: Could not generate parent suggestions: {e}")
+        return []
+
+def _suggest_fasta_parents(o, library_file, log_file):
+    """Suggest FASTA database parents for spectral libraries"""
+    suggestions = []
+    
+    if not log_file or not Path(log_file).exists():
+        return suggestions
+    
+    try:
+        # Parse DIA-NN log for FASTA database references
+        metadata = parse_diann_log(log_file)
+        fasta_database = metadata.get('FASTA_DATABASE')
+        
+        if fasta_database:
+            # Search for datasets with matching FASTA filename
+            print(f"  🔍 Looking for FASTA database: {fasta_database}")
+            
+            # Search by filename in dataset properties or metadata
+            search_terms = [
+                fasta_database,
+                Path(fasta_database).stem,  # without extension
+                Path(fasta_database).name   # with extension
+            ]
+            
+            # Use optimized batch processing instead of individual queries
+            suggestions = _batch_process_parent_suggestions(o, None, search_terms)
+            
+            # Update match reasons for FASTA-specific context
+            for suggestion in suggestions:
+                suggestion['match_reason'] = f'FASTA database reference: {fasta_database}'
+                suggestion['confidence'] = 'high'
+                    
+    except Exception as e:
+        print(f"⚠️  Error parsing log file: {e}")
+    
+    return suggestions
+
+def _suggest_fasta_version_parents(o, fasta_file, version):
+    """Suggest parent FASTA databases based on versioning patterns"""
+    suggestions = []
+    
+    try:
+        fasta_path = Path(fasta_file)
+        base_name = fasta_path.stem
+        
+        # Look for similar named databases with different versions
+        search_terms = [
+            base_name.split('_')[0] if '_' in base_name else base_name,  # base name
+            base_name.replace(version, '') if version else base_name,    # without version
+        ]
+        
+        # Filter out very short search terms
+        valid_terms = [term for term in search_terms if len(term) >= 3]
+        
+        if valid_terms:
+            # Use optimized batch processing
+            suggestions = _batch_process_parent_suggestions(o, None, valid_terms)
+            
+            # Update match reasons for version-specific context
+            for suggestion in suggestions:
+                suggestion['match_reason'] = f'Similar naming pattern: {suggestion.get("match_reason", "").split(": ")[-1] if ": " in suggestion.get("match_reason", "") else valid_terms[0]}'
+                suggestion['confidence'] = 'medium'
+                
+    except Exception as e:
+        print(f"⚠️  Error generating version suggestions: {e}")
+    
+    return suggestions[:5]
+
+def _interactive_parent_linking(suggestions):
+    """Present parent dataset suggestions to user for confirmation"""
+    confirmed_parents = []
+    
+    if not suggestions:
+        return confirmed_parents
+        
+    print(f"\n📋 Found {len(suggestions)} potential parent dataset(s):")
+    print("=" * 60)
+    
+    for i, suggestion in enumerate(suggestions, 1):
+        confidence_emoji = "🎯" if suggestion['confidence'] == 'high' else "🔍"
+        print(f"{confidence_emoji} [{i}] {suggestion['code']}")
+        print(f"    Name: {suggestion.get('name', 'N/A')}")
+        print(f"    Type: {suggestion['type']}")
+        print(f"    Date: {suggestion['registration_date']}")
+        print(f"    Match: {suggestion['match_reason']}")
+        print()
+    
+    print("Select datasets to link as parents:")
+    print("  • Enter numbers (e.g., '1,3,5' or '1-3')")
+    print("  • Press Enter to skip all")
+    print("  • Type 'all' to select all")
+    
+    try:
+        user_input = input("👉 Your choice: ").strip()
+        
+        if not user_input:
+            return confirmed_parents
+            
+        if user_input.lower() == 'all':
+            for suggestion in suggestions:
+                confirmed_parents.append(suggestion['code'])
+                print(f"✅ Linked: {suggestion['code']}")
+        else:
+            # Parse user selection
+            selected_indices = []
+            
+            for part in user_input.split(','):
+                part = part.strip()
+                if '-' in part:
+                    # Handle ranges like '1-3'
+                    start, end = map(int, part.split('-'))
+                    selected_indices.extend(range(start-1, end))
+                else:
+                    # Handle single numbers
+                    selected_indices.append(int(part) - 1)
+            
+            for idx in selected_indices:
+                if 0 <= idx < len(suggestions):
+                    confirmed_parents.append(suggestions[idx]['code'])
+                    print(f"✅ Linked: {suggestions[idx]['code']}")
+    
+    except (ValueError, KeyboardInterrupt):
+        print("❌ Invalid selection or cancelled")
+    
+    return confirmed_parents
+
+def _search_dataset_children(o, dataset_code):
+    """Find children of a specific dataset - highly optimized with caching"""
+    print(f"📥 Searching for children of {dataset_code}...")
+    
+    # Check cache first
+    cache_key = f"children_{dataset_code}"
+    cached_result = _get_relationship_cache(cache_key)
+    if cached_result is not None:
+        print(f"🚀 Using cached result ({len(cached_result)} children)")
+        _display_relationship_results(cached_result, "child", "📥")
+        return cached_result
+    
+    try:
+        # Optimized batch query with minimal data fetching
+        start_time = time.time()
+        
+        # Use withParents parameter for efficient server-side filtering
+        children = o.get_datasets(
+            withParents=dataset_code,
+            fetchOptions={
+                'withProperties': False,  # Skip properties for performance
+                'withSamples': False,     # Skip sample relationships
+                'withExperiment': False   # Skip experiment details
+            }
+        )
+        
+        query_time = time.time() - start_time
+        
+        if children is not None and len(children) > 0:
+            print(f"📥 Found {len(children)} child dataset(s) in {query_time:.2f}s")
+            
+            # Process results efficiently
+            processed_children = _process_relationship_results(children)
+            
+            # Cache results for future use
+            _set_relationship_cache(cache_key, processed_children)
+            
+            _display_relationship_results(processed_children, "child", "📥")
+            return processed_children
+        else:
+            print(f"📥 No child datasets found for {dataset_code}")
+            _set_relationship_cache(cache_key, [])  # Cache empty result
+            return []
+            
+    except Exception as e:
+        print(f"❌ Optimized search failed: {e}")
+        print("🔄 Trying fallback method...")
+        result = _search_dataset_children_fallback(o, dataset_code)
+        if result:
+            _set_relationship_cache(cache_key, result)
+        return result if result is not None else []
+
+def _search_dataset_parents(o, dataset_code):
+    """Find parents of a specific dataset - highly optimized with caching"""
+    print(f"📤 Searching for parents of {dataset_code}...")
+    
+    # Check cache first
+    cache_key = f"parents_{dataset_code}"
+    cached_result = _get_relationship_cache(cache_key)
+    if cached_result is not None:
+        print(f"🚀 Using cached result ({len(cached_result)} parents)")
+        _display_relationship_results(cached_result, "parent", "📤")
+        return cached_result
+    
+    try:
+        # Optimized batch query with minimal data fetching
+        start_time = time.time()
+        
+        # Use withChildren parameter for efficient server-side filtering
+        parents = o.get_datasets(
+            withChildren=dataset_code,
+            fetchOptions={
+                'withProperties': False,  # Skip properties for performance
+                'withSamples': False,     # Skip sample relationships
+                'withExperiment': False   # Skip experiment details
+            }
+        )
+        
+        query_time = time.time() - start_time
+        
+        if parents is not None and len(parents) > 0:
+            print(f"📤 Found {len(parents)} parent dataset(s) in {query_time:.2f}s")
+            
+            # Process results efficiently
+            processed_parents = _process_relationship_results(parents)
+            
+            # Cache results for future use
+            _set_relationship_cache(cache_key, processed_parents)
+            
+            _display_relationship_results(processed_parents, "parent", "📤")
+            return processed_parents
+        else:
+            print(f"📤 No parent datasets found for {dataset_code}")
+            _set_relationship_cache(cache_key, [])  # Cache empty result
+            return []
+            
+    except Exception as e:
+        print(f"❌ Optimized search failed: {e}")
+        print("🔄 Trying fallback method...")
+        result = _search_dataset_parents_fallback(o, dataset_code)
+        if result:
+            _set_relationship_cache(cache_key, result)
+        return result if result is not None else []
+
+def _search_dataset_children_fallback(o, dataset_code):
+    """Fallback method using dataset.get_children()"""
+    try:
+        datasets = o.get_datasets(code=dataset_code)
+        if len(datasets) == 0:
+            print(f"❌ Dataset {dataset_code} not found")
+            return
+        
+        dataset = datasets.iloc[0] if hasattr(datasets, 'iloc') else datasets[0]
+        children = dataset.get_children()
+        
+        if children:
+            print(f"📥 Found {len(children)} child dataset(s) (fallback):")
+            for child in children[:5]:  # Limit to 5
+                child_code = getattr(child, 'code', str(child))
+                child_type = getattr(child, 'type', 'Unknown')
+                print(f"  📊 {child_code} ({child_type})")
+        else:
+            print(f"📥 No child datasets found")
+    except Exception as e:
+        print(f"❌ Fallback also failed: {e}")
+
+def _search_dataset_parents_fallback(o, dataset_code):
+    """Fallback method using dataset.get_parents()"""
+    try:
+        datasets = o.get_datasets(code=dataset_code)
+        if len(datasets) == 0:
+            print(f"❌ Dataset {dataset_code} not found")
+            return
+        
+        dataset = datasets.iloc[0] if hasattr(datasets, 'iloc') else datasets[0]
+        parents = dataset.get_parents()
+        
+        if parents:
+            print(f"📤 Found {len(parents)} parent dataset(s) (fallback):")
+            for parent in parents[:5]:  # Limit to 5
+                parent_code = getattr(parent, 'code', str(parent))
+                parent_type = getattr(parent, 'type', 'Unknown')
+                print(f"  📊 {parent_code} ({parent_type})")
+        else:
+            print(f"📤 No parent datasets found")
+    except Exception as e:
+        print(f"❌ Fallback also failed: {e}")
 
 def _download_dataset(o, dataset_code, output_dir):
     """Download a specific dataset"""
@@ -384,7 +1407,7 @@ def _show_spaces_info(o):
     except Exception as e:
         print(f"❌ Failed to retrieve spaces: {e}")
 
-def _show_dataset_info(o, dataset_code):
+def _show_dataset_info(o, dataset_code, show_lineage=False):
     """Show detailed information about a dataset"""
     print(f"📊 Dataset Information: {dataset_code}")
     print("=" * 50)
@@ -416,25 +1439,107 @@ def _show_dataset_info(o, dataset_code):
             else:
                 print(f"  {props}")
         
-        # Files
+        # Files  
         try:
-            files = o.get_dataset_files(dataset_code)
-            print(f"\n📂 Files: {len(files)}")
-            for i, file_info in enumerate(files[:5]):  # Show first 5 files
-                try:
-                    file_path = getattr(file_info, 'path', f'file_{i}') if hasattr(file_info, 'path') else f'file_{i}'
-                    file_size = getattr(file_info, 'size', 'Unknown') if hasattr(file_info, 'size') else 'Unknown'
-                    print(f"  📄 {file_path} ({file_size} bytes)")
-                except:
-                    print(f"  📄 File {i+1}")
-            
-            if len(files) > 5:
-                print(f"  ... and {len(files) - 5} more files")
+            # Use the dataset object to get files
+            if hasattr(dataset, 'file_list') and dataset.file_list is not None:
+                files = dataset.file_list
+                print(f"\n📂 Files: {len(files)}")
+                for i, file_path in enumerate(files[:5]):  # Show first 5 files
+                    print(f"  📄 {file_path}")
+                
+                if len(files) > 5:
+                    print(f"  ... and {len(files) - 5} more files")
+            else:
+                print(f"\n📂 Files: File list not available")
         except Exception as file_error:
             print(f"\n📂 Files: Unable to retrieve ({file_error})")
+        
+        # Show parent-child relationships if requested
+        if show_lineage:
+            _show_dataset_lineage(o, dataset, dataset_code)
             
     except Exception as e:
         print(f"❌ Failed to retrieve dataset info: {e}")
+
+def _show_dataset_lineage(o, dataset, dataset_code):
+    """Show parent-child relationships for a dataset - optimized approach"""
+    print(f"\n🌳 Dataset Lineage:")
+    
+    # Try optimized search first (should be faster than dataset.get_parents())
+    try:
+        print(f"  🔍 Checking parents via optimized search...")
+        parents = o.get_datasets(withChildren=dataset_code)
+        if len(parents) > 0:
+            display_limit = min(5, len(parents))
+            print(f"  📤 Parents ({len(parents)}):")
+            
+            if hasattr(parents, 'iterrows'):
+                for i, (idx, parent) in enumerate(parents.head(display_limit).iterrows()):
+                    parent_code = getattr(parent, 'code', 'N/A')
+                    parent_type = getattr(parent, 'type', 'Unknown')
+                    print(f"    ↳ {parent_code} ({parent_type})")
+            else:
+                for parent in parents[:display_limit]:
+                    parent_code = getattr(parent, 'code', str(parent))
+                    parent_type = getattr(parent, 'type', 'Unknown')
+                    print(f"    ↳ {parent_code} ({parent_type})")
+            
+            if len(parents) > display_limit:
+                print(f"    ↳ ... and {len(parents) - display_limit} more parents")
+        else:
+            print(f"  📤 Parents: None")
+    except Exception as parent_error:
+        print(f"  📤 Parents: Optimized search failed, trying fallback... ({parent_error})")
+        try:
+            parents = dataset.get_parents()
+            if parents:
+                print(f"  📤 Parents ({len(parents)}) [fallback]:")
+                for parent in parents[:3]:  # Limit to 3
+                    parent_code = getattr(parent, 'code', str(parent))
+                    parent_type = getattr(parent, 'type', 'Unknown')
+                    print(f"    ↳ {parent_code} ({parent_type})")
+            else:
+                print(f"  📤 Parents: None")
+        except Exception as fallback_error:
+            print(f"  📤 Parents: Unable to retrieve ({fallback_error})")
+    
+    try:
+        print(f"  🔍 Checking children via optimized search...")
+        children = o.get_datasets(withParents=dataset_code)
+        if len(children) > 0:
+            display_limit = min(5, len(children))
+            print(f"  📥 Children ({len(children)}):")
+            
+            if hasattr(children, 'iterrows'):
+                for i, (idx, child) in enumerate(children.head(display_limit).iterrows()):
+                    child_code = getattr(child, 'code', 'N/A')
+                    child_type = getattr(child, 'type', 'Unknown')
+                    print(f"    ↳ {child_code} ({child_type})")
+            else:
+                for child in children[:display_limit]:
+                    child_code = getattr(child, 'code', str(child))
+                    child_type = getattr(child, 'type', 'Unknown')
+                    print(f"    ↳ {child_code} ({child_type})")
+            
+            if len(children) > display_limit:
+                print(f"    ↳ ... and {len(children) - display_limit} more children")
+        else:
+            print(f"  📥 Children: None")
+    except Exception as child_error:
+        print(f"  📥 Children: Optimized search failed, trying fallback... ({child_error})")
+        try:
+            children = dataset.get_children()
+            if children:
+                print(f"  📥 Children ({len(children)}) [fallback]:")
+                for child in children[:3]:  # Limit to 3
+                    child_code = getattr(child, 'code', str(child))
+                    child_type = getattr(child, 'type', 'Unknown')
+                    print(f"    ↳ {child_code} ({child_type})")
+            else:
+                print(f"  📥 Children: None")
+        except Exception as fallback_error:
+            print(f"  📥 Children: Unable to retrieve ({fallback_error})")
 
 def _show_sample_info(o, sample_code):
     """Show detailed information about a sample"""
@@ -610,7 +1715,7 @@ class OpenBISUploader:
         self.o = connection
     
     def upload_file(self, file_path, dataset_type, collection, name=None, notes=None, 
-                   additional_files=None, dry_run=False, **kwargs):
+                   additional_files=None, parent_datasets=None, dry_run=False, **kwargs):
         """Common upload workflow for all file types"""
         file_path = Path(file_path)
         
@@ -625,11 +1730,11 @@ class OpenBISUploader:
         
         if dry_run:
             return self._show_dry_run(file_path, human_readable_name, collection, 
-                                    dataset_type, notes, metadata, additional_files)
+                                    dataset_type, notes, metadata, additional_files, parent_datasets)
         
         # Perform actual upload
         return self._perform_upload(file_path, dataset_type, collection, 
-                                  human_readable_name, notes, metadata, additional_files)
+                                  human_readable_name, notes, metadata, additional_files, parent_datasets)
     
     def parse_metadata(self, file_path, **kwargs):
         """Override in subclasses to extract file-specific metadata"""
@@ -644,7 +1749,7 @@ class OpenBISUploader:
         return PROPERTY_MAPPINGS.get(dataset_type, PROPERTY_MAPPINGS['default'])
     
     def _show_dry_run(self, file_path, human_readable_name, collection, dataset_type, 
-                     notes, metadata, additional_files):
+                     notes, metadata, additional_files, parent_datasets):
         """Display what would be uploaded without actually uploading"""
         print(f"\n🔍 Dry run - would upload:")
         print(f"  File: {file_path}")
@@ -655,11 +1760,13 @@ class OpenBISUploader:
             print(f"  Notes: {notes}")
         if additional_files:
             print(f"  Additional files: {len(additional_files)}")
+        if parent_datasets:
+            print(f"  Parent datasets: {', '.join(parent_datasets)}")
         print(f"  Metadata fields: {len(metadata)}")
         return True
     
     def _perform_upload(self, file_path, dataset_type, collection, human_readable_name, 
-                       notes, metadata, additional_files):
+                       notes, metadata, additional_files, parent_datasets):
         """Perform the actual upload to OpenBIS"""
         print(f"\n🚀 Uploading to OpenBIS...")
         print(f"📁 File: {file_path}")
@@ -690,6 +1797,15 @@ class OpenBISUploader:
         # Save dataset
         print(f"💾 Saving dataset...")
         dataset.save()
+        
+        # Link to parent datasets if specified
+        if parent_datasets:
+            print(f"🔗 Linking to parent datasets...")
+            try:
+                dataset.add_parents(parent_datasets)
+                print(f"  ✅ Linked to {len(parent_datasets)} parent dataset(s): {', '.join(parent_datasets)}")
+            except Exception as e:
+                print(f"  ⚠️  Warning: Could not link to parent datasets: {e}")
         
         print(f"✅ Upload completed successfully!")
         print(f"📊 Dataset ID: {dataset.code}")
@@ -886,6 +2002,10 @@ def pybis_upload_main(args):
     parser.add_argument('--version', help='Version identifier (for databases)')
     parser.add_argument('--log-file', help='DIA-NN log file for spectral libraries')
     parser.add_argument('--notes', help='Additional notes for the dataset')
+    parser.add_argument('--parent-dataset', action='append', 
+                       help='Parent dataset code (can be specified multiple times)')
+    parser.add_argument('--auto-link', action='store_true', 
+                       help='Automatically suggest parent datasets based on metadata')
     parser.add_argument('--dry-run', action='store_true', help='Preview upload without executing')
     
     parsed_args = parser.parse_args(args)
@@ -932,10 +2052,20 @@ def pybis_upload_main(args):
         elif file_type == 'spectral_library':
             kwargs['log_file'] = parsed_args.log_file
         
+        # Handle auto-linking (enhanced parent-child relationships)
+        parent_datasets = parsed_args.parent_dataset or []
+        if parsed_args.auto_link:
+            print("🔗 Auto-linking: Searching for potential parent datasets...")
+            suggested_parents = _suggest_parent_datasets(o, parsed_args.file, file_type, kwargs)
+            if suggested_parents:
+                confirmed_parents = _interactive_parent_linking(suggested_parents)
+                parent_datasets.extend(confirmed_parents)
+        
         result = uploader.upload_file(
             parsed_args.file,
             dataset_type,
             collection,
+            parent_datasets=parent_datasets if parent_datasets else None,
             **kwargs
         )
         
@@ -1251,6 +2381,8 @@ def pybis_upload_library_main(args):
                        help='Dataset type (default: SPECTRAL_LIBRARY)')
     parser.add_argument('--name', help='Human-readable name for the spectral library dataset')
     parser.add_argument('--notes', help='Additional notes for the dataset')
+    parser.add_argument('--parent-dataset', action='append', 
+                       help='Parent dataset code (can be specified multiple times)')
     parser.add_argument('--dry-run', action='store_true', 
                        help='Show metadata that would be uploaded without actually uploading')
     
@@ -1267,6 +2399,7 @@ def pybis_upload_library_main(args):
             parsed_args.collection,
             name=parsed_args.name,
             notes=parsed_args.notes,
+            parent_datasets=parsed_args.parent_dataset,
             log_file=parsed_args.log_file,
             dry_run=parsed_args.dry_run
         )
@@ -1288,6 +2421,8 @@ def pybis_upload_fasta_main(args):
     parser.add_argument('--name', help='Human-readable name for the FASTA database')
     parser.add_argument('--version', help='Version or release identifier for the database')
     parser.add_argument('--notes', help='Additional notes for the dataset')
+    parser.add_argument('--parent-dataset', action='append', 
+                       help='Parent dataset code (can be specified multiple times)')
     parser.add_argument('--dry-run', action='store_true', 
                        help='Show metadata that would be uploaded without actually uploading')
     
@@ -1304,6 +2439,7 @@ def pybis_upload_fasta_main(args):
             parsed_args.collection,
             name=parsed_args.name,
             notes=parsed_args.notes,
+            parent_datasets=parsed_args.parent_dataset,
             version=parsed_args.version,
             dry_run=parsed_args.dry_run
         )

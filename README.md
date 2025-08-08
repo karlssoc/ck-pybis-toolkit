@@ -1,6 +1,6 @@
 # CK PyBIS Toolkit
 
-[![Docker](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml/badge.svg)](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml) [![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/karlssoc/ck-pybis-toolkit/releases)
+[![Docker](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml/badge.svg)](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml) [![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/karlssoc/ck-pybis-toolkit/releases)
 
 A command-line interface for OpenBIS operations with enhanced upload functionality, metadata extraction, and automatic file type detection. This toolkit provides comprehensive dataset management capabilities for OpenBIS servers. Built on PyBIS 1.37.3.
 
@@ -40,16 +40,40 @@ PYBIS_DOWNLOAD_DIR="~/Downloads/openbis-data"
 
 ## 📋 Commands
 
+*Enhanced with oBIS-inspired features for advanced filtering, JSON configuration, and intelligent parent-child relationships.*
+
+### Configuration Management
+
+``` bash
+# Initialize global configuration (oBIS-inspired JSON)
+pybis config init -g --init-example
+
+# Set configuration values
+pybis config set -g openbis_url "https://your-server.com/openbis/"
+pybis config set -g openbis_username "your-username"
+
+# View all settings
+pybis config list -g
+
+# Use nested configuration with dot notation
+pybis config set search.default_limit 20
+pybis config set default_collections.fasta "/DDB/CK/CUSTOM_FASTA"
+```
+
 ### Connection & Info
 
 ``` bash
 # Test connection
 pybis connect --verbose
 
-# Search for datasets, samples, experiments
+# Enhanced search with oBIS-style filtering
 pybis search proteome --type datasets --limit 10
 pybis search "mouse liver" --type samples
-pybis search experiment1 --type experiments
+pybis search --space DDB --dataset-type BIO_DB --save results.csv
+
+# Advanced filtering options
+pybis search --collection "/DDB/CK/FASTA" --registration-date ">2024-01-01"
+pybis search --property version --property-value "2024.08" --type datasets
 
 # Get detailed information
 pybis info --spaces
@@ -77,6 +101,10 @@ pybis download DATASET_CODE --output /path/to/output/
 pybis upload database.fasta --version "2024.08"
 pybis upload library.tsv --log-file diann.log
 pybis upload unknown_file.txt --collection "/DDB/CK/MISC"
+
+# Enhanced parent-child relationships with auto-linking
+pybis upload library.tsv --log-file diann.log --auto-link
+pybis upload processed.fasta --parent-dataset 20250502110701494-1323378
 
 # Preview before uploading
 pybis upload database.fasta --version "2024.08" --dry-run
@@ -391,6 +419,36 @@ done
 echo "All uploads completed successfully!"
 ```
 
+## 🤝 Related Tools
+
+### oBIS (OpenBIS Command Line Tool)
+
+For users who need **git-based version control** and **external data management**, consider the official [oBIS tool](https://pypi.org/project/obis/):
+
+- **Git integration**: Full version control with git + git-annex
+- **External data store**: Metadata-only mode for large datasets  
+- **Repository management**: Clone, move, and sync operations
+- **Complex workflows**: Advanced data provenance tracking
+
+**When to use oBIS vs PyBIS Toolkit:**
+
+| Feature | PyBIS Toolkit | oBIS |
+|---------|---------------|------|
+| **Proteomics workflows** | ✅ Specialized | ❌ Generic |
+| **FASTA/DIA-NN metadata** | ✅ Automatic extraction | ❌ Manual |
+| **Simple uploads** | ✅ `pybis upload file.fasta` | ❌ Complex setup |
+| **Git versioning** | ❌ Not supported | ✅ Full git integration |
+| **Large datasets (TB+)** | ❌ Direct storage only | ✅ External management |
+| **Multi-user repositories** | ❌ Individual focused | ✅ Team collaboration |
+
+**Migration Path:**
+```bash
+# Export PyBIS data for oBIS import
+pybis search --save datasets.csv
+# Use oBIS for git-based workflows when needed
+obis init my-project && cd my-project
+```
+
 ## 💡 Usage Modes
 
 The toolkit supports both CLI installation and direct Python execution:
@@ -415,13 +473,24 @@ python pybis_scripts.py download 20250807085639331-1331542
 
 ## 🌟 Features
 
+### Core Capabilities
 -   **Cross-platform compatibility** - Works on Linux and macOS
 -   **Automatic dependency management** - Self-installing with robust error handling
 -   **Comprehensive metadata extraction** - Automatic parsing of FASTA and spectral library files
 -   **Flexible upload system** - Support for multiple file types with auto-detection
--   **Secure credential management** - Encrypted storage with proper file permissions
+-   **Secure credential management** - Multiple configuration formats supported
 -   **Collection management** - Batch download and upload operations
 -   **Dry-run support** - Preview operations before execution
+
+### Enhanced Features (oBIS-Inspired)
+-   **Advanced search filtering** - Property-based, date range, and hierarchical filtering
+-   **JSON configuration system** - Global and project-specific settings with dot notation
+-   **Intelligent parent-child linking** - Automatic dataset relationship suggestions
+-   **CSV export capabilities** - Save search results for external processing
+-   **Interactive dataset selection** - User-friendly confirmation dialogs
+-   **🚀 NEW v1.0.2**: High-performance relationship queries with 15-minute intelligent caching
+-   **⚡ NEW v1.0.2**: Batch query optimization reducing API calls by ~80%
+-   **📊 NEW v1.0.2**: Performance monitoring with sub-second cached responses
 
 ## 🐳 Docker Usage
 
