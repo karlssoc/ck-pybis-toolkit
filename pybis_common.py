@@ -306,12 +306,18 @@ def _load_config_file(config_file):
         return {}
 
 def _save_config_file(config_file, config):
-    """Save JSON config file"""
+    """Save JSON config file with secure permissions"""
     try:
         import json
+        import os
         _ensure_config_dir(config_file)
+        
+        # Create file with secure permissions (600 - owner read/write only)
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=2)
+        
+        # Ensure file has secure permissions (readable/writable only by owner)
+        os.chmod(config_file, 0o600)
         return True
     except Exception as e:
         print(f"❌ Error saving config: {e}")
