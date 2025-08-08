@@ -1,7 +1,6 @@
 # CK PyBIS Toolkit
 
-[![Docker](https://github.com/yourusername/ck-pybis-toolkit/actions/workflows/docker.yml/badge.svg)](https://github.com/yourusername/ck-pybis-toolkit/actions/workflows/docker.yml)
-[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/yourusername/ck-pybis-toolkit/releases)
+[![Docker](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml/badge.svg)](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml) [![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/karlssoc/ck-pybis-toolkit/releases)
 
 A command-line interface for OpenBIS operations with enhanced upload functionality, metadata extraction, and automatic file type detection. This toolkit provides comprehensive dataset management capabilities for OpenBIS servers. Built on PyBIS 1.37.3.
 
@@ -9,7 +8,7 @@ A command-line interface for OpenBIS operations with enhanced upload functionali
 
 ### Installation
 
-```bash
+``` bash
 # Clone the repository
 git clone https://github.com/karlssoc/ck-pybis-toolkit.git
 cd ck-pybis-toolkit
@@ -18,22 +17,19 @@ cd ck-pybis-toolkit
 ./install.sh
 ```
 
-The installer will:
-- Auto-detect Python 3.7+ and pip
-- Install the `pybis` command system-wide or to `~/.local/bin/`
-- Set up credential loading from `~/.openbis/credentials`
-- Provide platform-specific PATH configuration guidance
-- Work on both Linux and macOS
+The installer will: - Auto-detect Python 3.7+ and pip - Install the `pybis` command system-wide or to `~/.local/bin/` - Set up credential loading from `~/.openbis/credentials` - Provide platform-specific PATH configuration guidance - Work on both Linux and macOS
 
 ### Configuration
 
 Edit your OpenBIS credentials file:
-```bash
+
+``` bash
 nano ~/.openbis/credentials
 ```
 
 Required format:
-```bash
+
+``` bash
 OPENBIS_URL="https://your-openbis-server.com/openbis/"
 OPENBIS_USERNAME="your-username"
 OPENBIS_PASSWORD="your-password"
@@ -46,7 +42,7 @@ PYBIS_DOWNLOAD_DIR="~/Downloads/openbis-data"
 
 ### Connection & Info
 
-```bash
+``` bash
 # Test connection
 pybis connect --verbose
 
@@ -63,7 +59,7 @@ pybis info --sample SAMPLE001
 
 ### Download
 
-```bash
+``` bash
 # Download datasets
 pybis download 20250807085639331-1331542 --output ~/data/
 pybis download 20250807085639331-1331542 --list-only
@@ -72,10 +68,11 @@ pybis download 20250807085639331-1331542 --list-only
 pybis download DATASET_CODE --output /path/to/output/
 ```
 
-### Upload (New Enhanced Functionality)
+### Upload
 
 #### Unified Upload (Auto-Detection)
-```bash
+
+``` bash
 # Auto-detects file type and sets appropriate defaults
 pybis upload database.fasta --version "2024.08"
 pybis upload library.tsv --log-file diann.log
@@ -86,7 +83,8 @@ pybis upload database.fasta --version "2024.08" --dry-run
 ```
 
 #### FASTA Database Upload
-```bash
+
+``` bash
 # Basic FASTA upload
 pybis upload-fasta database.fasta --version "2024.08.19"
 
@@ -106,7 +104,8 @@ pybis upload-fasta database.fasta --version "1.0" --dry-run
 ```
 
 #### Spectral Library Upload
-```bash
+
+``` bash
 # Upload library with DIA-NN log
 pybis upload-lib library.tsv --log-file diann.log
 
@@ -125,7 +124,7 @@ pybis upload-lib library.tsv --log-file diann.log --dry-run
 The unified `upload` command automatically detects file types:
 
 | File Extension | Detected Type | Default Collection | Default Dataset Type |
-|---|---|---|---|
+|------------------|------------------|------------------|------------------|
 | `.fasta`, `.fa`, `.fas` | FASTA Database | `/DDB/CK/FASTA` | `BIO_DB` |
 | `.tsv`, `.csv` (with "lib") | Spectral Library | `/DDB/CK/PREDSPECLIB` | `SPECTRAL_LIBRARY` |
 | `.speclib`, `.sptxt` | Spectral Library | `/DDB/CK/PREDSPECLIB` | `SPECTRAL_LIBRARY` |
@@ -134,65 +133,58 @@ The unified `upload` command automatically detects file types:
 ## 📊 Metadata Extraction
 
 ### FASTA Files
-Automatically extracts:
-- **Number of entries** (protein sequences)
-- **Primary species** (most common organism)
-- **Species breakdown** (top 5 species with percentages)
-- **File size** in MB
-- **Version** information
 
-Supports organism formats:
-- UniProt: `OS=Homo sapiens`
-- NCBI: `[Homo sapiens]`
-- Generic: `(Homo sapiens)`
+Automatically extracts: - **Number of entries** (protein sequences) - **Primary species** (most common organism) - **Species breakdown** (top 5 species with percentages) - **File size** in MB - **Version** information
+
+Supports organism formats: - UniProt: `OS=Homo sapiens` - NCBI: `[Homo sapiens]` - Generic: `(Homo sapiens)`
 
 ### Spectral Libraries (DIA-NN)
-Extracts from log files:
-- **DIA-NN version** and compilation info
-- **Generation statistics** (precursors, proteins, genes)
-- **FASTA database** used
-- **Parameters** (peptide length, m/z ranges, modifications)
-- **Generation method** (deep learning, in silico, etc.)
-- **Processing details** (threads, system info)
+
+Extracts from log files: - **DIA-NN version** and compilation info - **Generation statistics** (precursors, proteins, genes) - **FASTA database** used - **Parameters** (peptide length, m/z ranges, modifications) - **Generation method** (deep learning, in silico, etc.) - **Processing details** (threads, system info)
 
 ## 🏗️ Architecture
 
 ### Modular Upload System
-- **`OpenBISUploader`**: Base class with common functionality
-- **`FASTAUploader`**: Specialized for FASTA database files
-- **`SpectralLibraryUploader`**: Specialized for spectral library files
-- **Property mapping registry**: Handles dataset type-specific properties
-- **File type detection**: Automatic format recognition
+
+-   **`OpenBISUploader`**: Base class with common functionality
+-   **`FASTAUploader`**: Specialized for FASTA database files
+-   **`SpectralLibraryUploader`**: Specialized for spectral library files
+-   **Property mapping registry**: Handles dataset type-specific properties
+-   **File type detection**: Automatic format recognition
 
 ### Benefits
-- **50% code reduction** from original implementation
-- **Consistent error handling** across all upload types
-- **Extensible design** for adding new file types
-- **Backward compatibility** with existing commands
+
+-   **50% code reduction** from original implementation
+-   **Consistent error handling** across all upload types
+-   **Extensible design** for adding new file types
+-   **Backward compatibility** with existing commands
 
 ## Purpose
 
-- **Enhanced OpenBIS client** with comprehensive dataset management
-- **Automated metadata extraction** from FASTA and spectral library files
-- **Cross-platform installation** with robust dependency management
-- **Streamlined workflows** for research data management
+-   **Enhanced OpenBIS client** with comprehensive dataset management
+-   **Automated metadata extraction** from FASTA and spectral library files
+-   **Cross-platform installation** with robust dependency management
+-   **Streamlined workflows** for research data management
 
 ## Files
 
 ### Core Files
-- `pybis_common.py` - Shared PyBIS functionality and upload classes
-- `pybis_scripts.py` - Main CLI interface for all PyBIS tools
-- `setup.py` - Python package configuration
-- `install.sh` - Enhanced cross-platform installation script
+
+-   `pybis_common.py` - Shared PyBIS functionality and upload classes
+-   `pybis_scripts.py` - Main CLI interface for all PyBIS tools
+-   `setup.py` - Python package configuration
+-   `install.sh` - Enhanced cross-platform installation script
 
 ### Configuration
-- `credentials.example` - OpenBIS credentials template
-- `.gitignore` - Git ignore patterns for security and cleanliness
+
+-   `credentials.example` - OpenBIS credentials template
+-   `.gitignore` - Git ignore patterns for security and cleanliness
 
 ## Setup
 
 ### 1. Python Requirements
-```bash
+
+``` bash
 # Python 3.7+ required (auto-detected by installer)
 python3 --version
 
@@ -200,14 +192,16 @@ python3 --version
 ```
 
 ### 2. Credentials Configuration
-```bash
+
+``` bash
 # The installer creates ~/.openbis/credentials from template
 # Edit with your OpenBIS connection details
 nano ~/.openbis/credentials
 ```
 
 The credentials file format:
-```bash
+
+``` bash
 OPENBIS_URL="https://your-openbis-server.com/openbis/"
 OPENBIS_USERNAME="your_username"
 OPENBIS_PASSWORD="your_password"
@@ -217,7 +211,8 @@ PYBIS_DOWNLOAD_DIR="~/Downloads/openbis-data"
 ```
 
 ### 3. Test Setup
-```bash
+
+``` bash
 # Test connection
 pybis connect --verbose
 
@@ -231,7 +226,8 @@ pybis upload test.fasta --dry-run
 ## 🔧 Advanced Usage
 
 ### Custom Collections and Dataset Types
-```bash
+
+``` bash
 # Override defaults
 pybis upload database.fasta \
     --collection "/CUSTOM/PROJECT/EXPERIMENT" \
@@ -245,7 +241,8 @@ pybis upload ambiguous_file.txt \
 ```
 
 ### Batch Operations
-```bash
+
+``` bash
 # Upload multiple files
 for file in *.fasta; do
     pybis upload "$file" --version "2024.08" --dry-run
@@ -262,7 +259,8 @@ pybis search "mouse" --type datasets --limit 5 | \
 ## 🛠️ Development
 
 ### Project Structure
-```
+
+```         
 ck-pybis-toolkit/
 ├── pybis_common.py      # Core functionality and upload classes
 ├── pybis_scripts.py     # CLI command dispatcher
@@ -276,8 +274,9 @@ ck-pybis-toolkit/
 
 ### Adding New File Types
 
-1. **Create uploader class**:
-```python
+1.  **Create uploader class**:
+
+``` python
 class MyFileUploader(OpenBISUploader):
     def parse_metadata(self, file_path, **kwargs):
         # Extract metadata from your file type
@@ -288,15 +287,17 @@ class MyFileUploader(OpenBISUploader):
         return custom_name or f"My File {file_path.stem}"
 ```
 
-2. **Update file type detection**:
-```python
+2.  **Update file type detection**:
+
+``` python
 def detect_file_type(file_path):
     if suffix == '.myext':
         return 'my_file_type'
 ```
 
-3. **Add to factory**:
-```python
+3.  **Add to factory**:
+
+``` python
 uploaders = {
     'my_file_type': MyFileUploader,
 }
@@ -307,7 +308,8 @@ uploaders = {
 ### Common Issues
 
 **Credentials not loaded**:
-```bash
+
+``` bash
 # Check if file exists and has correct format
 cat ~/.openbis/credentials
 
@@ -316,7 +318,8 @@ source ~/.openbis/credentials && echo $OPENBIS_URL
 ```
 
 **Command not found**:
-```bash
+
+``` bash
 # Check if ~/.local/bin is in PATH
 echo $PATH | grep ~/.local/bin
 
@@ -326,7 +329,8 @@ source ~/.zshrc
 ```
 
 **Python/pip issues**:
-```bash
+
+``` bash
 # Check Python version
 python3 --version
 
@@ -338,15 +342,13 @@ python3 --version
 pip3 install --user -e .
 ```
 
-**Connection timeouts**:
-- Check VPN connection
-- Verify OpenBIS server URL
-- Test network connectivity to your OpenBIS server
+**Connection timeouts**: - Check VPN connection - Verify OpenBIS server URL - Test network connectivity to your OpenBIS server
 
 ## 📚 Examples
 
 ### Typical Workflow
-```bash
+
+``` bash
 # 1. Test connection
 pybis connect --verbose
 
@@ -368,7 +370,8 @@ pybis download 20250807085639331-1331542 --output ~/analysis/
 ```
 
 ### Integration with Scripts
-```bash
+
+``` bash
 #!/bin/bash
 # Batch upload script
 
@@ -388,72 +391,77 @@ done
 echo "All uploads completed successfully!"
 ```
 
-## 🔄 Migration from Old Scripts
+## 💡 Usage Modes
 
-The new CLI maintains backward compatibility:
+The toolkit supports both CLI installation and direct Python execution:
 
-```bash
-# Old way (still works)
-python pybis_scripts.py upload-fasta database.fasta --version "1.0"
-
-# New way (preferred)
+``` bash
+# Installed CLI (recommended - works from anywhere)
 pybis upload database.fasta --version "1.0"
+pybis download 20250807085639331-1331542
+
+# Direct Python execution (development/debugging)
+python pybis_scripts.py upload-fasta database.fasta --version "1.0"  
+python pybis_scripts.py download 20250807085639331-1331542
 ```
 
 ## 📈 Performance
 
-- **50% less code** than original implementation
-- **Consistent error handling** across all operations  
-- **Automatic metadata extraction** saves manual data entry
-- **Dry-run mode** prevents upload mistakes
-- **Clean dependency management** with automatic PyBIS installation
+-   **50% less code** than original implementation
+-   **Consistent error handling** across all operations\
+-   **Automatic metadata extraction** saves manual data entry
+-   **Dry-run mode** prevents upload mistakes
+-   **Clean dependency management** with automatic PyBIS installation
 
 ## 🌟 Features
 
-- **Cross-platform compatibility** - Works on Linux and macOS
-- **Automatic dependency management** - Self-installing with robust error handling
-- **Comprehensive metadata extraction** - Automatic parsing of FASTA and spectral library files
-- **Flexible upload system** - Support for multiple file types with auto-detection
-- **Secure credential management** - Encrypted storage with proper file permissions
-- **Collection management** - Batch download and upload operations
-- **Dry-run support** - Preview operations before execution
+-   **Cross-platform compatibility** - Works on Linux and macOS
+-   **Automatic dependency management** - Self-installing with robust error handling
+-   **Comprehensive metadata extraction** - Automatic parsing of FASTA and spectral library files
+-   **Flexible upload system** - Support for multiple file types with auto-detection
+-   **Secure credential management** - Encrypted storage with proper file permissions
+-   **Collection management** - Batch download and upload operations
+-   **Dry-run support** - Preview operations before execution
 
 ## 🐳 Docker Usage
 
 ### Pull from GitHub Container Registry
-```bash
+
+``` bash
 # Latest version
-docker pull ghcr.io/yourusername/ck-pybis-toolkit:latest
+docker pull ghcr.io/karlssoc/ck-pybis-toolkit:latest
 
 # Specific version
-docker pull ghcr.io/yourusername/ck-pybis-toolkit:1.0.0
+docker pull ghcr.io/karlssoc/ck-pybis-toolkit:1.0.0
 ```
 
 ### Run with credentials
-```bash
+
+``` bash
 # Mount credentials file
 docker run --rm -v ~/.openbis/credentials:/root/.openbis/credentials:ro \
-    ghcr.io/yourusername/ck-pybis-toolkit:latest connect --verbose
+    ghcr.io/karlssoc/ck-pybis-toolkit:latest connect --verbose
 
 # Mount data directory for downloads
 docker run --rm -v ~/.openbis/credentials:/root/.openbis/credentials:ro \
     -v ~/data:/data \
-    ghcr.io/yourusername/ck-pybis-toolkit:latest \
+    ghcr.io/karlssoc/ck-pybis-toolkit:latest \
     download 20250807085639331-1331542 --output /data
 ```
 
 ## 📋 Versioning
 
-- **Project Version**: Independent semantic versioning (v1.0.0, v1.1.0, etc.)
-- **PyBIS Dependency**: Uses PyBIS 1.37.3 (pinned for stability)
-- **Container Tags**: Automatic GitHub Actions deployment
-  - `latest` - Main branch builds
-  - `v1.0.0` - Tagged releases
-  - `1.0.0` - Semantic version
-  - `1.0` - Major.minor version
+-   **Project Version**: Independent semantic versioning (v1.0.0, v1.1.0, etc.)
+-   **PyBIS Dependency**: Uses PyBIS 1.37.3 (pinned for stability)
+-   **Container Tags**: Automatic GitHub Actions deployment
+    -   `latest` - Main branch builds
+    -   `v1.0.0` - Tagged releases
+    -   `1.0.0` - Semantic version
+    -   `1.0` - Major.minor version
 
 ### Release Process
-```bash
+
+``` bash
 # Update version in setup.py
 vim setup.py  # Change version="1.0.1"
 
@@ -468,11 +476,7 @@ git push origin main v1.0.1
 
 ## 🤝 Contributing
 
-This toolkit is designed for research data management. Contributions welcome for:
-- New file type support
-- Enhanced metadata extraction
-- Additional OpenBIS operations
-- Platform compatibility improvements
+This toolkit is designed for research data management. Contributions welcome for: - New file type support - Enhanced metadata extraction - Additional OpenBIS operations - Platform compatibility improvements
 
 ## 📄 License
 
