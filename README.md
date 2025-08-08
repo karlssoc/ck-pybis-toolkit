@@ -21,6 +21,34 @@ The installer will: - Auto-detect Python 3.7+ and pip - Install the `pybis` comm
 
 ### Configuration
 
+The toolkit supports **two configuration methods** (choose one):
+
+#### **🆕 JSON Configuration (Recommended - oBIS-inspired)**
+
+Initialize and configure with the modern JSON system:
+
+``` bash
+# Initialize global configuration with example template
+pybis config init -g --init-example
+
+# Edit the JSON configuration file
+nano ~/.pybis/config.json
+
+# Or set individual values via command line
+pybis config set -g openbis_url "https://your-server.com/openbis/"
+pybis config set -g openbis_username "your-username"
+pybis config set -g openbis_password "your-password"
+pybis config set -g pybis_download_dir "~/Downloads/openbis-data"
+```
+
+**JSON Configuration Priority:**
+1. Environment variables (highest priority)
+2. Local project config: `./.pybis/config.json`
+3. Global config: `~/.pybis/config.json`
+4. Legacy credentials: `~/.openbis/credentials` (fallback)
+
+#### **📁 Legacy Configuration (Backward Compatible)**
+
 Edit your OpenBIS credentials file:
 
 ``` bash
@@ -36,6 +64,7 @@ OPENBIS_PASSWORD="your-password"
 
 # Optional: Default download directory
 PYBIS_DOWNLOAD_DIR="~/Downloads/openbis-data"
+PYBIS_VERIFY_CERTIFICATES="false"
 ```
 
 ## 📋 Commands
@@ -219,15 +248,31 @@ python3 --version
 # PyBIS 1.37.3 will be installed automatically
 ```
 
-### 2. Credentials Configuration
+### 2. Configuration Setup
+
+**🆕 Recommended: JSON Configuration**
 
 ``` bash
-# The installer creates ~/.openbis/credentials from template
-# Edit with your OpenBIS connection details
+# Initialize JSON configuration with example template
+pybis config init -g --init-example
+
+# Edit the configuration file
+nano ~/.pybis/config.json
+
+# Or set values via command line
+pybis config set -g openbis_url "https://your-server.com/openbis/"
+pybis config set -g openbis_username "your_username"
+pybis config set -g openbis_password "your_password"
+```
+
+**📁 Legacy: Credentials File**
+
+``` bash
+# Edit legacy credentials file (still supported)
 nano ~/.openbis/credentials
 ```
 
-The credentials file format:
+The legacy credentials file format:
 
 ``` bash
 OPENBIS_URL="https://your-openbis-server.com/openbis/"
