@@ -22,3 +22,33 @@ The CLI automatically loads credentials from `~/.openbis/credentials` on every c
 - `PYBIS_DOWNLOAD_DIR` - Default download directory (optional, defaults to `~/data/openbis/`)
 
 Uses PyBIS built-in token caching for session persistence - login once, reuse token automatically.
+
+## PyBIS Documentation
+
+https://openbis.readthedocs.io/en/20.10.x/software-developer-documentation/apis/python-v3-api.html
+
+## Development Guidelines
+
+When adding or changing PyBIS functionality:
+
+1. **Always consult the PyBIS documentation first** - Review the official API documentation above to understand available methods, parameters, and best practices.
+
+2. **Follow existing patterns** - Look at current implementations in `pybis_common.py` for:
+   - Connection management (`get_openbis_connection()`)
+   - Error handling patterns
+   - Token caching usage
+   - Dataset/sample/experiment operations
+
+3. **Test thoroughly** - Use the test datasets mentioned in this file:
+   - Working dataset: `20250807085639331-1331542`
+
+4. **Update documentation** - Always update both `CLAUDE.md` and `README.md` with:
+   - New functionality descriptions
+   - Usage examples
+   - Any new environment variables or configuration options
+
+5. **Version management** - When adding significant functionality:
+   - Update version in `setup.py`
+   - Update version references in `CLAUDE.md` and `README.md`
+   - Follow semantic versioning (major.minor.patch)
+
