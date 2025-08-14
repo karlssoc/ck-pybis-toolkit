@@ -1,8 +1,18 @@
-# PyBIS Toolkit Quick Reference v1.0.2
+# PyBIS Toolkit Quick Reference v1.0.3
 
 ## 🚀 Installation
 ```bash
+# Standard installation (requires Python 3.8+)
 ./install.sh
+
+# Test what would be installed without making changes
+./install.sh --dry-run
+
+# Enable verbose output for troubleshooting
+./install.sh --verbose
+
+# Get help
+./install.sh --help
 ```
 
 ## ⚙️ Configuration

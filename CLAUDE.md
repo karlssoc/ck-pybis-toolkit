@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CK PyBIS Toolkit v1.0.2 standalone development environment with oBIS-inspired enhancements. This is a Python-based OpenBIS client toolkit for debugging dataset download issues, developing new PyBIS functionality, and prototyping improvements. Built on PyBIS 1.37.3.
+CK PyBIS Toolkit v1.0.3 standalone development environment with oBIS-inspired enhancements. This is a Python-based OpenBIS client toolkit for debugging dataset download issues, developing new PyBIS functionality, and prototyping improvements. Built on PyBIS 1.37.3.
 
 **Enhanced Features:**
 - Advanced search with oBIS-style filtering and CSV export
@@ -17,9 +17,9 @@ CK PyBIS Toolkit v1.0.2 standalone development environment with oBIS-inspired en
 
 ## Project Versioning and Tags
 
-- Project Version: v1.0.2  
+- Project Version: v1.0.3  
 - PyBIS Library Version: 1.37.3
-- Release Tags: `v1.0.0`, `v1.0.1`, `v1.0.2`
+- Release Tags: `v1.0.0`, `v1.0.1`, `v1.0.2`, `v1.0.3`
 
 ## Configuration System
 

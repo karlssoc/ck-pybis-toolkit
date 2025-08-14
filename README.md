@@ -1,6 +1,6 @@
 # CK PyBIS Toolkit
 
-[![Docker](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml/badge.svg)](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml) [![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/karlssoc/ck-pybis-toolkit/releases)
+[![Docker](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml/badge.svg)](https://github.com/karlssoc/ck-pybis-toolkit/actions/workflows/docker.yml) [![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](https://github.com/karlssoc/ck-pybis-toolkit/releases)
 
 A command-line interface for OpenBIS operations with enhanced upload functionality, metadata extraction, and automatic file type detection. This toolkit provides comprehensive dataset management capabilities for OpenBIS servers. Built on PyBIS 1.37.3.
 
@@ -17,7 +17,7 @@ cd ck-pybis-toolkit
 ./install.sh
 ```
 
-The installer will: - Auto-detect Python 3.7+ and pip - Install the `pybis` command system-wide or to `~/.local/bin/` - Set up credential loading from `~/.openbis/credentials` - Provide platform-specific PATH configuration guidance - Work on both Linux and macOS
+The installer will: - Auto-detect Python 3.8+ and pip - Install the `pybis` command system-wide or to `~/.local/bin/` - Set up credential loading from `~/.openbis/credentials` - Provide platform-specific PATH configuration guidance - Work on both Linux and macOS - Support `--dry-run` and `--verbose` modes for safe testing
 
 ### Configuration
 
@@ -242,7 +242,7 @@ Extracts from log files: - **DIA-NN version** and compilation info - **Generatio
 ### 1. Python Requirements
 
 ``` bash
-# Python 3.7+ required (auto-detected by installer)
+# Python 3.8+ required (auto-detected by installer)
 python3 --version
 
 # PyBIS 1.37.3 will be installed automatically
@@ -404,7 +404,7 @@ source ~/.zshrc
 **Python/pip issues**:
 
 ``` bash
-# Check Python version
+# Check Python version (3.8+ required)
 python3 --version
 
 # Install Python if missing
@@ -413,6 +413,9 @@ python3 --version
 
 # Try user installation
 pip3 install --user -e .
+
+# Test installer with dry-run mode
+./install.sh --dry-run
 ```
 
 **Connection timeouts**: - Check VPN connection - Verify OpenBIS server URL - Test network connectivity to your OpenBIS server

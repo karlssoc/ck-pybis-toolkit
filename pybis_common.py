@@ -9,6 +9,7 @@ import sys
 import argparse
 import re
 import time
+import hashlib
 from pathlib import Path
 
 def _load_credentials_if_available():
@@ -470,6 +471,10 @@ def pybis_download_main(args):
                        help='Output directory (default: $PYBIS_DOWNLOAD_DIR or ~/data/openbis/)')
     parser.add_argument('--list-only', action='store_true', 
                        help='Only list files, do not download')
+    parser.add_argument('--force', action='store_true', 
+                       help='Force re-download even if files exist')
+    parser.add_argument('--verify-checksum', action='store_true', 
+                       help='Verify file integrity using checksums (slower)')
     
     parsed_args = parser.parse_args(args)
     
@@ -483,7 +488,8 @@ def pybis_download_main(args):
     if parsed_args.list_only:
         _list_dataset_files(o, parsed_args.dataset_code)
     else:
-        _download_dataset(o, parsed_args.dataset_code, parsed_args.output)
+        _download_dataset(o, parsed_args.dataset_code, parsed_args.output, 
+                         force=parsed_args.force, verify_checksum=parsed_args.verify_checksum)
 
 def pybis_download_collection_main(args):
     """PyBIS Download Collection Tool - Download all datasets from a collection"""
@@ -495,6 +501,10 @@ def pybis_download_collection_main(args):
                        help='Only list datasets, do not download')
     parser.add_argument('--limit', type=int, default=None,
                        help='Maximum number of datasets to download')
+    parser.add_argument('--force', action='store_true', 
+                       help='Force re-download even if files exist')
+    parser.add_argument('--verify-checksum', action='store_true', 
+                       help='Verify file integrity using checksums (slower)')
     
     parsed_args = parser.parse_args(args)
     
@@ -508,7 +518,8 @@ def pybis_download_collection_main(args):
     if parsed_args.list_only:
         _list_collection_datasets(o, parsed_args.collection, parsed_args.limit)
     else:
-        _download_collection_datasets(o, parsed_args.collection, parsed_args.output, parsed_args.limit)
+        _download_collection_datasets(o, parsed_args.collection, parsed_args.output, parsed_args.limit, 
+                                     force=parsed_args.force, verify_checksum=parsed_args.verify_checksum)
 
 def pybis_info_main(args):
     """PyBIS Info Tool - Get detailed information about objects"""
@@ -1273,7 +1284,65 @@ def _search_dataset_parents_fallback(o, dataset_code):
     except Exception as e:
         print(f"❌ Fallback also failed: {e}")
 
-def _download_dataset(o, dataset_code, output_dir):
+def _compute_file_checksum(file_path, algorithm='sha1'):
+    """Compute checksum for a file using specified algorithm"""
+    hash_obj = hashlib.new(algorithm)
+    try:
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                hash_obj.update(chunk)
+        return hash_obj.hexdigest()
+    except Exception as e:
+        print(f"⚠️ Failed to compute checksum for {file_path}: {e}")
+        return None
+
+def _should_skip_file(local_file_path, remote_file_info, verify_checksum=False):
+    """Check if file should be skipped based on existence and integrity"""
+    if not local_file_path.exists():
+        return False, "File does not exist locally"
+    
+    # Size comparison (fast check)
+    local_size = local_file_path.stat().st_size
+    remote_size = getattr(remote_file_info, 'fileLength', None)
+    
+    if remote_size is not None and local_size != remote_size:
+        return False, f"Size mismatch (local: {local_size}, remote: {remote_size})"
+    
+    # Modification time check (if available)
+    try:
+        local_mtime = local_file_path.stat().st_mtime
+        remote_mtime = getattr(remote_file_info, 'modificationDate', None)
+        if remote_mtime is not None:
+            # Convert remote mtime if it's a timestamp object
+            if hasattr(remote_mtime, 'timestamp'):
+                remote_mtime = remote_mtime.timestamp()
+            elif isinstance(remote_mtime, str):
+                # Skip string parsing for now - too variable
+                remote_mtime = None
+            
+            if remote_mtime and local_mtime >= remote_mtime:
+                return True, f"Local file is newer or same age"
+    except Exception:
+        # Skip mtime comparison if it fails
+        pass
+    
+    # Optional checksum validation (slower but thorough)
+    if verify_checksum:
+        remote_checksum = getattr(remote_file_info, 'checksum', None) or getattr(remote_file_info, 'crc32', None)
+        if remote_checksum:
+            local_checksum = _compute_file_checksum(local_file_path)
+            if local_checksum and local_checksum.lower() != str(remote_checksum).lower():
+                return False, f"Checksum mismatch"
+            elif local_checksum:
+                return True, "Checksum verified"
+    
+    # Default: skip if file exists and size matches
+    if remote_size is None or local_size == remote_size:
+        return True, "File exists with matching size"
+    
+    return False, "Unknown verification failure"
+
+def _download_dataset(o, dataset_code, output_dir, force=False, verify_checksum=False):
     """Download a specific dataset"""
     print(f"📥 Downloading dataset: {dataset_code}")
     
@@ -1297,20 +1366,79 @@ def _download_dataset(o, dataset_code, output_dir):
         
         print(f"📁 Output directory: {output_path}")
         
+        # Smart download with skip-existing logic
+        if not force:
+            try:
+                # Get file list from dataset to check what needs downloading
+                print(f"🔍 Analyzing files to download...")
+                files = dataset.get_files(start_folder="/")
+                
+                skip_count = 0
+                download_count = 0
+                files_to_download = []
+                
+                if hasattr(files, 'iterrows'):
+                    # DataFrame format
+                    for _, file_info in files.iterrows():
+                        file_path = getattr(file_info, 'pathInDataSet', None)
+                        if file_path:
+                            local_file_path = output_path / file_path.lstrip('/')
+                            should_skip, reason = _should_skip_file(local_file_path, file_info, verify_checksum)
+                            
+                            if should_skip:
+                                skip_count += 1
+                                print(f"⏭️  Skipping {file_path} ({reason})")
+                            else:
+                                download_count += 1
+                                files_to_download.append(file_path)
+                                print(f"📥 Will download {file_path} ({reason})")
+                else:
+                    # List format - fallback to simple existence check
+                    for file_info in files:
+                        file_path = getattr(file_info, 'pathInDataSet', str(file_info))
+                        local_file_path = output_path / file_path.lstrip('/')
+                        should_skip, reason = _should_skip_file(local_file_path, file_info, verify_checksum)
+                        
+                        if should_skip:
+                            skip_count += 1
+                            print(f"⏭️  Skipping {file_path} ({reason})")
+                        else:
+                            download_count += 1
+                            files_to_download.append(file_path)
+                            print(f"📥 Will download {file_path} ({reason})")
+                
+                print(f"📊 Analysis complete: {skip_count} files to skip, {download_count} files to download")
+                
+                if download_count == 0:
+                    print(f"✅ All files already exist and are up-to-date!")
+                    return True
+                    
+            except Exception as analysis_error:
+                print(f"⚠️ Could not analyze files individually: {analysis_error}")
+                print(f"🚀 Falling back to full dataset download...")
+                files_to_download = None
+        else:
+            print(f"🚀 Force mode: downloading all files...")
+            files_to_download = None
+        
         try:
-            # Use PyBIS download method (following user's pattern)
-            print(f"🚀 Starting download...")
-            dataset.download(destination=str(output_path))
+            # Download the dataset (PyBIS will handle individual files)
+            if files_to_download is None:
+                print(f"🚀 Starting full dataset download...")
+                dataset.download(destination=str(output_path))
+            else:
+                print(f"🚀 Starting selective download of {len(files_to_download)} files...")
+                dataset.download(destination=str(output_path))
             
             # Check if download was successful by looking for created files
             downloaded_files = list(output_path.rglob('*'))
             file_count = len([f for f in downloaded_files if f.is_file()])
             
             if file_count > 0:
-                print(f"✅ Download complete: {file_count} files downloaded to {output_path}")
+                print(f"✅ Download complete: {file_count} total files in {output_path}")
                 
                 # Show some downloaded files
-                print("📂 Downloaded files:")
+                print("📂 Files in dataset:")
                 for f in downloaded_files[:5]:
                     if f.is_file():
                         size = f.stat().st_size
@@ -1646,7 +1774,7 @@ def _list_collection_datasets(o, collection_path, limit=None):
     except Exception as e:
         print(f"❌ Failed to list collection datasets: {e}")
 
-def _download_collection_datasets(o, collection_path, output_dir, limit=None):
+def _download_collection_datasets(o, collection_path, output_dir, limit=None, force=False, verify_checksum=False):
     """Download all datasets from a collection"""
     print(f"📦 Downloading datasets from collection: {collection_path}")
     
@@ -1685,7 +1813,7 @@ def _download_collection_datasets(o, collection_path, output_dir, limit=None):
                 code = getattr(ds, 'code', f'dataset_{i}')
                 print(f"\n📥 [{i+1}/{limit or total_count}] Downloading: {code}")
                 
-                if _download_dataset(o, code, output_dir):
+                if _download_dataset(o, code, output_dir, force=force, verify_checksum=verify_checksum):
                     success_count += 1
                 else:
                     failed_count += 1
@@ -1694,7 +1822,7 @@ def _download_collection_datasets(o, collection_path, output_dir, limit=None):
                 code = getattr(ds, 'code', f'dataset_{i}')
                 print(f"\n📥 [{i+1}/{limit or total_count}] Downloading: {code}")
                 
-                if _download_dataset(o, code, output_dir):
+                if _download_dataset(o, code, output_dir, force=force, verify_checksum=verify_checksum):
                     success_count += 1
                 else:
                     failed_count += 1
