@@ -63,6 +63,16 @@ pybis config set -g pybis_use_cache true
 
 Uses PyBIS built-in token caching for session persistence - login once, reuse token automatically.
 
+## Installation
+
+Install using pipx for isolated environment:
+
+```bash
+git clone https://github.com/karlssoc/ck-pybis-toolkit.git
+cd ck-pybis-toolkit
+pipx install .
+```
+
 ## PyBIS Documentation
 
 https://openbis.readthedocs.io/en/20.10.x/software-developer-documentation/apis/python-v3-api.html

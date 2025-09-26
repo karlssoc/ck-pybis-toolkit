@@ -13,11 +13,11 @@ A command-line interface for OpenBIS operations with enhanced upload functionali
 git clone https://github.com/karlssoc/ck-pybis-toolkit.git
 cd ck-pybis-toolkit
 
-# Run the installer
-./install.sh
+# Install with pipx (recommended)
+pipx install .
 ```
 
-The installer will: - Auto-detect Python 3.8+ and pip - Install the `pybis` command system-wide or to `~/.local/bin/` - Set up credential loading from `~/.openbis/credentials` - Provide platform-specific PATH configuration guidance - Work on both Linux and macOS - Support `--dry-run` and `--verbose` modes for safe testing
+**Why pipx?** Creates an isolated environment for the toolkit, avoiding dependency conflicts while making the `pybis` command available system-wide.
 
 ### Configuration
 
@@ -242,8 +242,9 @@ Extracts from log files: - **DIA-NN version** and compilation info - **Generatio
 ### 1. Python Requirements
 
 ``` bash
-# Python 3.8+ required (auto-detected by installer)
+# Python 3.8+ and pipx required
 python3 --version
+pip install pipx  # Install pipx if not available
 
 # PyBIS 1.37.3 will be installed automatically
 ```

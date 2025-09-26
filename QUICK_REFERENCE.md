@@ -2,17 +2,15 @@
 
 ## 🚀 Installation
 ```bash
-# Standard installation (requires Python 3.8+)
+# Install with pipx (recommended - requires Python 3.8+)
+pipx install .
+
+# Alternative: Install pipx first if needed
+pip install pipx
+pipx install .
+
+# Legacy installation script (still available)
 ./install.sh
-
-# Test what would be installed without making changes
-./install.sh --dry-run
-
-# Enable verbose output for troubleshooting
-./install.sh --verbose
-
-# Get help
-./install.sh --help
 ```
 
 ## ⚙️ Configuration
