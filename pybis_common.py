@@ -2666,34 +2666,44 @@ class AnalyzedDataUploader(OpenBISUploader):
     def _perform_directory_upload(self, directory_path, file_mappings, dataset_type, collection,
                                  human_readable_name, notes, parent_datasets):
         """Perform the actual directory upload to OpenBIS with preserved directory structure"""
+        import tempfile
+        import shutil
+
         print(f"\n🚀 Uploading analyzed data to OpenBIS...")
         print(f"📂 Collection: {collection}")
         print(f"🏷️  Dataset type: {dataset_type}")
         print(f"📁 Files: {len(file_mappings)}")
         print(f"📁 Preserving directory structure from: {directory_path}")
 
-        # Create dataset with directory structure preservation
-        dataset = self.o.new_dataset(
-            type=dataset_type,
-            experiment=collection
-        )
+        # Create a temporary directory that mirrors the original structure
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_base = Path(temp_dir) / "dataset"
+            temp_base.mkdir()
 
-        # Add files with preserved directory structure
-        for absolute_path, relative_path in file_mappings:
-            # Use the relative path to preserve directory structure in OpenBIS
-            dataset.add_file(str(absolute_path), str(relative_path))
+            # Copy files to temporary directory preserving structure
+            for absolute_path, relative_path in file_mappings:
+                temp_file_path = temp_base / relative_path
+                temp_file_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(absolute_path, temp_file_path)
 
-        # Set properties
-        dataset.props['$name'] = human_readable_name
-        if notes:
-            dataset.props['notes'] = notes
+            # Create dataset using the temporary structured directory
+            dataset = self.o.new_dataset(
+                type=dataset_type,
+                experiment=collection,
+                files=[str(temp_base)]  # Pass the root directory
+            )
 
-        # Set parent relationships if specified
-        if parent_datasets:
-            self._set_parent_relationships(dataset, parent_datasets)
+            # Set properties
+            dataset.props['$name'] = human_readable_name
+            if notes:
+                dataset.props['notes'] = notes
 
-        # Save the dataset
-        dataset.save()
+            # Set parent relationships if specified
+            if parent_datasets:
+                self._set_parent_relationships(dataset, parent_datasets)
+
+            # Save the dataset
+            dataset.save()
 
         print(f"✅ Successfully uploaded analyzed data!")
         print(f"🔗 Dataset code: {dataset.code}")
