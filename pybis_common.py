@@ -2592,57 +2592,58 @@ class AnalyzedDataUploader(OpenBISUploader):
         super().__init__(connection)
         self.exclusions = exclusions or self.DEFAULT_EXCLUSIONS
     
-    def upload_directory(self, directory_path, dataset_type, collection, name=None, notes=None, 
+    def upload_directory(self, directory_path, dataset_type, collection, name=None, notes=None,
                         parent_datasets=None, additional_exclusions=None, dry_run=False, **kwargs):
         """Upload all files in a directory tree with exclusions"""
         directory_path = Path(directory_path)
-        
+
         if not directory_path.exists() or not directory_path.is_dir():
             raise ValueError(f"Directory not found or not a directory: {directory_path}")
-        
+
         # Combine default and additional exclusions
         exclusions = self.exclusions.copy()
         if additional_exclusions:
             exclusions.update(additional_exclusions)
-        
-        # Walk directory tree and collect files
-        files_to_upload = self._collect_files(directory_path, exclusions)
-        
-        if not files_to_upload:
+
+        # Walk directory tree and collect files with relative paths
+        file_mappings = self._collect_files(directory_path, exclusions)
+
+        if not file_mappings:
             print(f"❌ No files found to upload in {directory_path}")
             return False
-        
+
         # Generate human-readable name
         human_readable_name = name or f"Analyzed data: {directory_path.name}"
-        
+
         if dry_run:
-            return self._show_directory_dry_run(directory_path, files_to_upload, exclusions,
-                                              human_readable_name, collection, dataset_type, 
+            return self._show_directory_dry_run(directory_path, file_mappings, exclusions,
+                                              human_readable_name, collection, dataset_type,
                                               notes, parent_datasets)
-        
+
         # Perform actual upload
-        return self._perform_directory_upload(files_to_upload, dataset_type, collection, 
+        return self._perform_directory_upload(directory_path, file_mappings, dataset_type, collection,
                                             human_readable_name, notes, parent_datasets)
     
     def _collect_files(self, directory_path, exclusions):
-        """Walk directory tree and collect files, excluding specified extensions"""
-        files_to_upload = []
-        
+        """Walk directory tree and collect files with relative paths, excluding specified extensions"""
+        file_mappings = []
+
         for root, dirs, files in os.walk(directory_path):
             root_path = Path(root)
             for file in files:
                 file_path = root_path / file
                 file_extension = file_path.suffix.lower()
-                
+
                 # Skip excluded file types
                 if file_extension not in exclusions:
-                    files_to_upload.append(file_path)
+                    relative_path = file_path.relative_to(directory_path)
+                    file_mappings.append((file_path, relative_path))
                 else:
                     print(f"⏭️  Skipping excluded file: {file_path.relative_to(directory_path)}")
-        
-        return files_to_upload
+
+        return file_mappings
     
-    def _show_directory_dry_run(self, directory_path, files_to_upload, exclusions,
+    def _show_directory_dry_run(self, directory_path, file_mappings, exclusions,
                                human_readable_name, collection, dataset_type, notes, parent_datasets):
         """Display what would be uploaded without actually uploading"""
         print(f"\n🔍 Dry run - would upload directory:")
@@ -2654,49 +2655,51 @@ class AnalyzedDataUploader(OpenBISUploader):
             print(f"  Notes: {notes}")
         if parent_datasets:
             print(f"  Parent datasets: {', '.join(parent_datasets)}")
-        
-        print(f"\n📁 Files to upload ({len(files_to_upload)}):")
-        for file_path in sorted(files_to_upload):
-            relative_path = file_path.relative_to(directory_path)
+
+        print(f"\n📁 Files to upload ({len(file_mappings)}):")
+        for _, relative_path in sorted(file_mappings, key=lambda x: x[1]):
             print(f"    ✅ {relative_path}")
-        
+
         print(f"\n🚫 Excluded extensions: {', '.join(sorted(exclusions))}")
         return True
     
-    def _perform_directory_upload(self, files_to_upload, dataset_type, collection, 
+    def _perform_directory_upload(self, directory_path, file_mappings, dataset_type, collection,
                                  human_readable_name, notes, parent_datasets):
-        """Perform the actual directory upload to OpenBIS"""
+        """Perform the actual directory upload to OpenBIS with preserved directory structure"""
         print(f"\n🚀 Uploading analyzed data to OpenBIS...")
         print(f"📂 Collection: {collection}")
         print(f"🏷️  Dataset type: {dataset_type}")
-        print(f"📁 Files: {len(files_to_upload)}")
-        
-        # Convert to strings for PyBIS
-        files_str_list = [str(f) for f in files_to_upload]
-        
-        # Create dataset
+        print(f"📁 Files: {len(file_mappings)}")
+        print(f"📁 Preserving directory structure from: {directory_path}")
+
+        # Create dataset with directory structure preservation
         dataset = self.o.new_dataset(
             type=dataset_type,
-            experiment=collection,
-            files=files_str_list
+            experiment=collection
         )
-        
+
+        # Add files with preserved directory structure
+        for absolute_path, relative_path in file_mappings:
+            # Use the relative path to preserve directory structure in OpenBIS
+            dataset.add_file(str(absolute_path), str(relative_path))
+
         # Set properties
         dataset.props['$name'] = human_readable_name
         if notes:
             dataset.props['notes'] = notes
-        
+
         # Set parent relationships if specified
         if parent_datasets:
             self._set_parent_relationships(dataset, parent_datasets)
-        
+
         # Save the dataset
         dataset.save()
-        
+
         print(f"✅ Successfully uploaded analyzed data!")
         print(f"🔗 Dataset code: {dataset.code}")
-        print(f"📁 Files uploaded: {len(files_to_upload)}")
-        
+        print(f"📁 Files uploaded: {len(file_mappings)}")
+        print(f"📂 Directory structure preserved")
+
         return dataset
     
     def _set_parent_relationships(self, dataset, parent_datasets):
