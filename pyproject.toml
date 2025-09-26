@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ck-pybis-toolkit"
+version = "1.0.3"
+description = "CK PyBIS Toolkit - Enhanced OpenBIS client for dataset management and debugging"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    {name = "CK"}
+]
+dependencies = [
+    "pybis==1.37.3"
+]
+
+[project.scripts]
+pybis = "pybis_scripts:main"
+
+[tool.setuptools]
+py-modules = ["pybis_scripts", "pybis_common"]

@@ -45,6 +45,7 @@ def main():
         print("  upload             - Upload files with auto-linking (auto-detects type)")
         print("  upload-lib         - Upload spectral libraries")
         print("  upload-fasta       - Upload FASTA database files")
+        print("  upload-analyzed    - Upload analyzed data directories with filtering")
         print()
         print("Usage: python pybis_scripts.py <tool> [args...]")
         print("Examples:")
@@ -74,9 +75,11 @@ def main():
         pybis_upload_library_main(args)
     elif tool == "upload-fasta":
         pybis_upload_fasta_main(args)
+    elif tool == "upload-analyzed":
+        pybis_upload_analyzed_main(args)
     else:
         print(f"❌ Unknown tool: {tool}")
-        print("Available tools: connect, config, search, download, download-collection, info, upload, upload-lib, upload-fasta")
+        print("Available tools: connect, config, search, download, download-collection, info, upload, upload-lib, upload-fasta, upload-analyzed")
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -2583,3 +2583,190 @@ def pybis_upload_fasta_main(args):
     except Exception as e:
         print(f"❌ Upload failed: {e}")
         return False
+class AnalyzedDataUploader(OpenBISUploader):
+    """Uploader for analyzed data directories with file filtering"""
+    
+    DEFAULT_EXCLUSIONS = {'.mzml', '.bin', '.d', '.raw', '.quant', '.dia'}
+    
+    def __init__(self, connection, exclusions=None):
+        super().__init__(connection)
+        self.exclusions = exclusions or self.DEFAULT_EXCLUSIONS
+    
+    def upload_directory(self, directory_path, dataset_type, collection, name=None, notes=None, 
+                        parent_datasets=None, additional_exclusions=None, dry_run=False, **kwargs):
+        """Upload all files in a directory tree with exclusions"""
+        directory_path = Path(directory_path)
+        
+        if not directory_path.exists() or not directory_path.is_dir():
+            raise ValueError(f"Directory not found or not a directory: {directory_path}")
+        
+        # Combine default and additional exclusions
+        exclusions = self.exclusions.copy()
+        if additional_exclusions:
+            exclusions.update(additional_exclusions)
+        
+        # Walk directory tree and collect files
+        files_to_upload = self._collect_files(directory_path, exclusions)
+        
+        if not files_to_upload:
+            print(f"❌ No files found to upload in {directory_path}")
+            return False
+        
+        # Generate human-readable name
+        human_readable_name = name or f"Analyzed data: {directory_path.name}"
+        
+        if dry_run:
+            return self._show_directory_dry_run(directory_path, files_to_upload, exclusions,
+                                              human_readable_name, collection, dataset_type, 
+                                              notes, parent_datasets)
+        
+        # Perform actual upload
+        return self._perform_directory_upload(files_to_upload, dataset_type, collection, 
+                                            human_readable_name, notes, parent_datasets)
+    
+    def _collect_files(self, directory_path, exclusions):
+        """Walk directory tree and collect files, excluding specified extensions"""
+        files_to_upload = []
+        
+        for root, dirs, files in os.walk(directory_path):
+            root_path = Path(root)
+            for file in files:
+                file_path = root_path / file
+                file_extension = file_path.suffix.lower()
+                
+                # Skip excluded file types
+                if file_extension not in exclusions:
+                    files_to_upload.append(file_path)
+                else:
+                    print(f"⏭️  Skipping excluded file: {file_path.relative_to(directory_path)}")
+        
+        return files_to_upload
+    
+    def _show_directory_dry_run(self, directory_path, files_to_upload, exclusions,
+                               human_readable_name, collection, dataset_type, notes, parent_datasets):
+        """Display what would be uploaded without actually uploading"""
+        print(f"\n🔍 Dry run - would upload directory:")
+        print(f"  Directory: {directory_path}")
+        print(f"  Name: {human_readable_name}")
+        print(f"  Collection: {collection}")
+        print(f"  Dataset type: {dataset_type}")
+        if notes:
+            print(f"  Notes: {notes}")
+        if parent_datasets:
+            print(f"  Parent datasets: {', '.join(parent_datasets)}")
+        
+        print(f"\n📁 Files to upload ({len(files_to_upload)}):")
+        for file_path in sorted(files_to_upload):
+            relative_path = file_path.relative_to(directory_path)
+            print(f"    ✅ {relative_path}")
+        
+        print(f"\n🚫 Excluded extensions: {', '.join(sorted(exclusions))}")
+        return True
+    
+    def _perform_directory_upload(self, files_to_upload, dataset_type, collection, 
+                                 human_readable_name, notes, parent_datasets):
+        """Perform the actual directory upload to OpenBIS"""
+        print(f"\n🚀 Uploading analyzed data to OpenBIS...")
+        print(f"📂 Collection: {collection}")
+        print(f"🏷️  Dataset type: {dataset_type}")
+        print(f"📁 Files: {len(files_to_upload)}")
+        
+        # Convert to strings for PyBIS
+        files_str_list = [str(f) for f in files_to_upload]
+        
+        # Create dataset
+        dataset = self.o.new_dataset(
+            type=dataset_type,
+            experiment=collection,
+            files=files_str_list
+        )
+        
+        # Set properties
+        dataset.props['$name'] = human_readable_name
+        if notes:
+            dataset.props['notes'] = notes
+        
+        # Set parent relationships if specified
+        if parent_datasets:
+            self._set_parent_relationships(dataset, parent_datasets)
+        
+        # Save the dataset
+        dataset.save()
+        
+        print(f"✅ Successfully uploaded analyzed data!")
+        print(f"🔗 Dataset code: {dataset.code}")
+        print(f"📁 Files uploaded: {len(files_to_upload)}")
+        
+        return dataset
+    
+    def _set_parent_relationships(self, dataset, parent_datasets):
+        """Set parent-child relationships for the dataset"""
+        try:
+            parent_codes = []
+            for parent_code in parent_datasets:
+                try:
+                    parent_ds = self.o.get_dataset(parent_code)
+                    if parent_ds:
+                        parent_codes.append(parent_code)
+                        print(f"🔗 Linking to parent: {parent_code}")
+                    else:
+                        print(f"⚠️  Warning: Parent dataset not found: {parent_code}")
+                except Exception as e:
+                    print(f"⚠️  Warning: Could not verify parent dataset {parent_code}: {e}")
+            
+            if parent_codes:
+                dataset.set_parents(parent_codes)
+                print(f"✅ Set {len(parent_codes)} parent relationships")
+                
+        except Exception as e:
+            print(f"⚠️  Warning: Could not set parent relationships: {e}")
+
+
+def pybis_upload_analyzed_main(args):
+    """PyBIS Upload Analyzed Data Tool - Upload directories of analyzed data with exclusions"""
+    parser = argparse.ArgumentParser(description='Upload analyzed data directory to OpenBIS with file filtering')
+    parser.add_argument('directory', help='Directory containing analyzed data to upload')
+    parser.add_argument('--collection', default='/DDB/CK/ANALYZED', 
+                       help='OpenBIS collection path (default: /DDB/CK/ANALYZED)')
+    parser.add_argument('--dataset-type', default='ANALYZED_DATA',
+                       help='Dataset type (default: ANALYZED_DATA)')
+    parser.add_argument('--name', help='Human-readable name for the analyzed data dataset')
+    parser.add_argument('--notes', help='Additional notes for the dataset')
+    parser.add_argument('--parent-dataset', action='append', 
+                       help='Parent dataset code (can be specified multiple times)')
+    parser.add_argument('--exclude', action='append', 
+                       help='Additional file extensions to exclude (e.g., --exclude .tmp --exclude .log)')
+    parser.add_argument('--dry-run', action='store_true', 
+                       help='Show files that would be uploaded without actually uploading')
+    
+    parsed_args = parser.parse_args(args)
+    
+    try:
+        o = get_openbis_connection()
+        
+        # Prepare additional exclusions
+        additional_exclusions = set()
+        if parsed_args.exclude:
+            for ext in parsed_args.exclude:
+                if not ext.startswith('.'):
+                    ext = '.' + ext
+                additional_exclusions.add(ext.lower())
+        
+        uploader = AnalyzedDataUploader(o)
+        
+        result = uploader.upload_directory(
+            parsed_args.directory,
+            parsed_args.dataset_type,
+            parsed_args.collection,
+            name=parsed_args.name,
+            notes=parsed_args.notes,
+            parent_datasets=parsed_args.parent_dataset,
+            additional_exclusions=additional_exclusions,
+            dry_run=parsed_args.dry_run
+        )
+        
+        return result is not None
+        
+    except Exception as e:
+        print(f"❌ Upload failed: {e}")
+        return False
